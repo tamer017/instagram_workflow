@@ -1,0 +1,37 @@
+name: Hourly Instagram Publish (with token auto-refresh)
+
+on:
+  schedule:
+    - cron: '0 * * * *'   # every hour at minute 0 (UTC)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install deps
+        run: pip install requests pynacl
+
+      - name: Publish to Instagram (script will refresh token and try to update secret)
+        env:
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+          LONG_LIVED_TOKEN: ${{ secrets.LONG_LIVED_TOKEN }}
+          GH_PAT: ${{ secrets.GH_PAT }}                  # optional: PAT to allow script to update the secret
+          GITHUB_REPOSITORY: ${{ github.repository }}    # the repo slug (owner/repo) used by the script
+          CAPTION: "Automated hourly Reel"
+          VIDEO_URL: "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4"
+          MAX_POLL_SECONDS: "1500"
+          POLL_INTERVAL: "30"
+        run: |
+          python publish_reel.py
