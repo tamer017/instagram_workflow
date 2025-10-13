@@ -1,4 +1,4 @@
-name: Publish via ngrok with localtunnel fallback
+name: Publish via ngrok with localtunnel fallback (fixed URL handling)
 
 on:
   workflow_dispatch:
@@ -59,7 +59,8 @@ jobs:
                 if curl -s http://127.0.0.1:4040/api/tunnels >/tmp/tunnels.json 2>/dev/null; then
                   PUB=$(jq -r '.tunnels[0].public_url' /tmp/tunnels.json 2>/dev/null || true)
                   if [ -n "$PUB" ] && [ "$PUB" != "null" ]; then
-                    echo "NGROK_URL=$PUB" > /tmp/public_url.txt
+                    # write only the raw URL to file (no prefix)
+                    echo "$PUB" > /tmp/public_url.txt
                     NGROK_OK=true
                     break
                   fi
@@ -83,7 +84,8 @@ jobs:
               sleep 1
               URL=$(grep -o 'https://[^ ]*loca.lt' /tmp/lt.log | head -n1 || true)
               if [ -n "$URL" ]; then
-                echo "LT_URL=$URL" > /tmp/public_url.txt
+                # write only URL (no prefix)
+                echo "$URL" > /tmp/public_url.txt
                 break
               fi
             done
@@ -96,14 +98,25 @@ jobs:
             echo "Using localtunnel public URL: $(cat /tmp/public_url.txt)"
           fi
 
-      - name: Publish to Instagram
+      - name: Verify public URL and publish to Instagram
         env:
           IG_USER_ID: ${{ secrets.IG_USER_ID }}
           LONG_LIVED_TOKEN: ${{ secrets.LONG_LIVED_TOKEN }}
         run: |
           PUB=$(cat /tmp/public_url.txt)
+          # strip whitespace/newlines
+          PUB=$(echo "$PUB" | tr -d '\r\n')
           VIDEO_URL="${PUB}/video.mp4"
           THUMB_URL="${PUB}/thumb_1.jpg"
+          echo "Checking VIDEO_URL=$VIDEO_URL"
+          # quick HTTP HEAD check
+          if ! curl -I --max-time 10 "$VIDEO_URL" | head -n1 | grep -q 'HTTP/'; then
+            echo "Video URL not reachable or timed out. Dumping /tmp/http.log for debugging:"
+            tail -n 200 /tmp/http.log || true
+            cat /tmp/ngrok.log || true
+            cat /tmp/lt.log || true
+            exit 1
+          fi
           echo "Publishing with VIDEO_URL=$VIDEO_URL THUMB_URL=$THUMB_URL"
           python publish_reel.py "$VIDEO_URL" "$THUMB_URL"
 

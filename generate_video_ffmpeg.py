@@ -1,9 +1,4 @@
 # generate_video_ffmpeg.py
-"""Generate a vertical color-changing MP4 using Pillow frames + ffmpeg.
-
-Usage:
-  python generate_video_ffmpeg.py <output_dir> [duration_seconds] [fps] [num_thumbs]
-"""
 import os, sys, math, subprocess
 from PIL import Image
 import random
@@ -72,18 +67,11 @@ def main():
     num_thumbs = int(sys.argv[4]) if len(sys.argv) >= 5 else 3
 
     os.makedirs(out_dir, exist_ok=True)
-    print("Generating frames...")
     frames_dir, total = generate_frames(out_dir, duration=duration, fps=fps)
-    print("Frames generated:", total)
     video_path = os.path.join(out_dir, "video.mp4")
-    print("Building video with ffmpeg:", video_path)
     build_video_with_ffmpeg(frames_dir, video_path, fps=fps)
-    print("Extracting thumbnails...")
     thumbs = extract_thumbnails(frames_dir, out_dir, count=num_thumbs, total_frames=total)
-    print("Thumbnails:", thumbs)
-    print("Zipping outputs...")
     z = zip_outputs(out_dir)
-    print("Zipped outputs at:", z)
     print(video_path)
 
 if __name__ == '__main__':
