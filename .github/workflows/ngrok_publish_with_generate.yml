@@ -1,0 +1,97 @@
+name: Publish via ngrok (temporary public video) - every 5 minutes
+
+on:
+  schedule:
+    - cron: '*/5 * * * *'   # every 5 minutes (UTC)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ngrok-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup environment and deps
+        run: |
+          python -m pip install --upgrade pip
+          sudo apt-get update -y
+          sudo apt-get install -y jq unzip curl ffmpeg
+          pip install moviepy requests pynacl imageio-ffmpeg
+
+      - name: Download ngrok
+        run: |
+          curl -fsSL https://bin.equinox.io/c/4VmDzA7iaHb/ngrok-stable-linux-amd64.zip -o /tmp/ngrok.zip
+          unzip -o /tmp/ngrok.zip -d /tmp
+          chmod +x /tmp/ngrok
+
+      - name: Generate video + thumbnails
+        run: |
+          mkdir -p tmp_video outputs
+          python generate_video.py tmp_video 6 30 3
+          ls -l tmp_video
+
+      - name: Start local HTTP server serving video
+        run: |
+          python -m http.server 8000 --directory tmp_video >/tmp/http.log 2>&1 &
+          echo $! > /tmp/http.pid
+          sleep 1
+          echo "HTTP server started (PID $(cat /tmp/http.pid))"
+
+      - name: Start ngrok tunnel and get public URL
+        env:
+          NGROK_AUTHTOKEN: ${{ secrets.NGROK_AUTHTOKEN }}
+        run: |
+          /tmp/ngrok authtoken "$NGROK_AUTHTOKEN"
+          /tmp/ngrok http 8000 --log=stdout > /tmp/ngrok.log 2>&1 &
+          echo $! > /tmp/ngrok.pid
+          for i in {1..15}; do
+            sleep 1
+            if curl -s http://127.0.0.1:4040/api/tunnels >/tmp/tunnels.json 2>/dev/null; then
+              PUB=$(jq -r '.tunnels[0].public_url' /tmp/tunnels.json 2>/dev/null || true)
+              if [ -n "$PUB" ] && [ "$PUB" != "null" ]; then
+                echo "NGROK_URL=$PUB" > /tmp/ngrok_url.txt
+                echo "Public URL: $PUB"
+                break
+              fi
+            fi
+          done
+          if [ ! -f /tmp/ngrok_url.txt ]; then
+            echo "Failed to get ngrok public URL. Dumping log:"
+            tail -n +1 /tmp/ngrok.log
+            exit 1
+          fi
+
+      - name: Publish to Instagram via script (try thumbnails)
+        env:
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+          LONG_LIVED_TOKEN: ${{ secrets.LONG_LIVED_TOKEN }}
+          GH_PAT: ${{ secrets.GH_PAT }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          CAPTION: "Temporary generated Reel"
+          MAX_POLL_SECONDS: "1500"
+          POLL_INTERVAL: "8"
+        run: |
+          NGROK_URL=$(cat /tmp/ngrok_url.txt)
+          VIDEO_URL="${NGROK_URL}/video.mp4"
+          # pick first thumbnail as thumbnail_url (hosted via same tunnel)
+          THUMB_URL="${NGROK_URL}/thumb_1.jpg"
+          echo "Using VIDEO_URL=$VIDEO_URL and THUMB_URL=$THUMB_URL"
+          python publish_reel.py "$VIDEO_URL" "$THUMB_URL"
+
+      - name: Upload artifacts (video + thumbs zip)
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated-media
+          path: tmp_video/video_and_thumbs.zip
+
+      - name: Teardown (stop ngrok and http server)
+        if: always()
+        run: |
+          if [ -f /tmp/ngrok.pid ]; then kill $(cat /tmp/ngrok.pid) || true; fi
+          if [ -f /tmp/http.pid ]; then kill $(cat /tmp/http.pid) || true; fi
+          sleep 1
+          echo "Teardown finished."

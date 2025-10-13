@@ -16,9 +16,9 @@ except Exception:
 # Environment / defaults
 IG_USER_ID = os.environ.get("IG_USER_ID")
 LONG_LIVED_TOKEN = os.environ.get("LONG_LIVED_TOKEN")
-CAPTION = os.environ.get("CAPTION", "Automated hourly Reel")
+CAPTION = os.environ.get("CAPTION", "Automated post")
 MAX_WAIT_SECONDS = int(os.environ.get("MAX_POLL_SECONDS", "1500"))
-INTERVAL_SECONDS = int(os.environ.get("POLL_INTERVAL", "30"))
+INTERVAL_SECONDS = int(os.environ.get("POLL_INTERVAL", "10"))
 DEFAULT_VIDEO_URL = "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4"
 
 # GitHub details (used only if you provide GH_PAT)
@@ -26,9 +26,6 @@ GITHUB_REPOSITORY = os.environ.get("GITHUB_REPOSITORY")   # auto-set in Actions
 GH_PAT = os.environ.get("GH_PAT")                         # set as Actions secret if you want auto-update
 
 def refresh_long_lived_token(token):
-    """
-    Refresh an Instagram long-lived token. Returns new token or raises.
-    """
     try:
         url = "https://graph.instagram.com/refresh_access_token"
         params = {"grant_type": "ig_refresh_token", "access_token": token}
@@ -39,25 +36,18 @@ def refresh_long_lived_token(token):
         if new_token and new_token != token:
             print("Token refreshed successfully (not printing token).")
             return new_token
-        # If API did not return a new token, return original token
         print("Refresh endpoint responded but no new token returned; continuing with existing token.")
         return token
     except Exception as e:
         print("Token refresh failed or token expired:", e)
-        # return original token so we still attempt publish (may fail if expired)
         return token
 
 def github_encrypt_and_put_secret(repo, pat, secret_name, secret_value):
-    """
-    Encrypt secret_value with the repository public key and PUT it to GitHub Actions secrets API.
-    Requires PyNaCl (nacl) library and a PAT with repo permissions.
-    """
     if not HAS_PYNACL:
         print("PyNaCl not installed; cannot update GitHub secret automatically. Install 'pynacl' if you want this feature.")
         return False
 
     headers = {"Authorization": f"token {pat}", "Accept": "application/vnd.github+json"}
-    # 1) Get public key
     url_key = f"https://api.github.com/repos/{repo}/actions/secrets/public-key"
     r = requests.get(url_key, headers=headers, timeout=20)
     if r.status_code != 200:
@@ -66,12 +56,11 @@ def github_encrypt_and_put_secret(repo, pat, secret_name, secret_value):
 
     j = r.json()
     key_id = j.get("key_id")
-    key = j.get("key")  # base64 encoded
+    key = j.get("key")
     if not key_id or not key:
         print("Invalid public key response from GitHub:", j)
         return False
 
-    # encrypt the secret using libsodium sealed box (PyNaCl)
     try:
         public_key = public.PublicKey(base64.b64decode(key), encoder=encoding.RawEncoder())
         sealed_box = public.SealedBox(public_key)
@@ -81,7 +70,6 @@ def github_encrypt_and_put_secret(repo, pat, secret_name, secret_value):
         print("Encryption failed:", e)
         return False
 
-    # 2) PUT encrypted secret
     put_url = f"https://api.github.com/repos/{repo}/actions/secrets/{secret_name}"
     payload = {"encrypted_value": encrypted_value, "key_id": key_id}
     r2 = requests.put(put_url, headers=headers, data=json.dumps(payload), timeout=20)
@@ -92,7 +80,7 @@ def github_encrypt_and_put_secret(repo, pat, secret_name, secret_value):
         print(f"Failed to update GitHub secret: {r2.status_code} {r2.text}")
         return False
 
-def create_video_container(ig_user_id, token, video_url, caption):
+def create_video_container(ig_user_id, token, video_url, caption, thumbnail_url=None):
     url = f"https://graph.facebook.com/v17.0/{ig_user_id}/media"
     payload = {
         "media_type": "REELS",
@@ -100,6 +88,9 @@ def create_video_container(ig_user_id, token, video_url, caption):
         "caption": caption,
         "access_token": token
     }
+    # If a thumbnail URL is provided, include it (some API versions may ignore it; log a warning if present)
+    if thumbnail_url:
+        payload["thumbnail_url"] = thumbnail_url
     r = requests.post(url, params=payload, timeout=30)
     r.raise_for_status()
     data = r.json()
@@ -125,30 +116,32 @@ def publish_media(ig_user_id, token, creation_id):
     return media_id
 
 def main():
-    # Determine video URL: CLI arg > env var > default constant
+    # video_url CLI arg > env var > default
     video_url = None
+    thumb_url = None
     if len(sys.argv) >= 2:
         video_url = sys.argv[1].strip()
     else:
         video_url = os.environ.get("VIDEO_URL", DEFAULT_VIDEO_URL).strip()
+    if len(sys.argv) >= 3:
+        thumb_url = sys.argv[2].strip()
+    else:
+        thumb_url = os.environ.get("THUMBNAIL_URL")
 
     if not IG_USER_ID or not LONG_LIVED_TOKEN:
         print("ERROR: IG_USER_ID and LONG_LIVED_TOKEN must be set as environment variables.")
         sys.exit(2)
 
-    # 1) Refresh token
+    # refresh token
     new_token = refresh_long_lived_token(LONG_LIVED_TOKEN)
     token_in_use = new_token or LONG_LIVED_TOKEN
 
-    # 2) If running in GitHub Actions and GH_PAT is provided, attempt to update the repository secret
-    #    Note: GH_PAT must be stored as a repo secret named GH_PAT in Actions (see README). Do NOT store PAT in code.
+    # attempt to update secret if in Actions and GH_PAT provided
     if GITHUB_REPOSITORY and GH_PAT:
-        # Only try to update if we indeed got a different token
         if new_token and new_token != LONG_LIVED_TOKEN:
             print("Attempting to update repository secret with the refreshed token (won't print token).")
             ok = github_encrypt_and_put_secret(GITHUB_REPOSITORY, GH_PAT, "LONG_LIVED_TOKEN", new_token)
             if ok:
-                # if updated successfully, update the local variable so script continues with new token
                 token_in_use = new_token
             else:
                 print("Failed to update repository secret automatically. You may need to update LONG_LIVED_TOKEN manually.")
@@ -161,9 +154,11 @@ def main():
             print("Token refresh skipped or not needed.")
 
     print("Using video URL:", video_url)
-    creation_id = create_video_container(IG_USER_ID, token_in_use, video_url, CAPTION)
+    if thumb_url:
+        print("Using thumbnail URL:", thumb_url)
+    creation_id = create_video_container(IG_USER_ID, token_in_use, video_url, CAPTION, thumbnail_url=thumb_url)
 
-    # Polling loop
+    # poll
     poll_url = f"https://graph.facebook.com/v17.0/{creation_id}"
     poll_params = {"fields": "status_code", "access_token": token_in_use}
 
