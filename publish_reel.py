@@ -6,14 +6,12 @@ import sys
 import base64
 import json
 
-# Optional dependency for GitHub secret encryption
 try:
     from nacl import public, encoding
     HAS_PYNACL = True
 except Exception:
     HAS_PYNACL = False
 
-# Environment / defaults
 IG_USER_ID = os.environ.get("IG_USER_ID")
 LONG_LIVED_TOKEN = os.environ.get("LONG_LIVED_TOKEN")
 CAPTION = os.environ.get("CAPTION", "Automated post")
@@ -21,9 +19,8 @@ MAX_WAIT_SECONDS = int(os.environ.get("MAX_POLL_SECONDS", "1500"))
 INTERVAL_SECONDS = int(os.environ.get("POLL_INTERVAL", "10"))
 DEFAULT_VIDEO_URL = "https://interactive-examples.mdn.mozilla.net/media/cc0-videos/flower.mp4"
 
-# GitHub details (used only if you provide GH_PAT)
-GITHUB_REPOSITORY = os.environ.get("GITHUB_REPOSITORY")   # auto-set in Actions
-GH_PAT = os.environ.get("GH_PAT")                         # set as Actions secret if you want auto-update
+GITHUB_REPOSITORY = os.environ.get("GITHUB_REPOSITORY")
+GH_PAT = os.environ.get("GH_PAT")
 
 def refresh_long_lived_token(token):
     try:
@@ -44,23 +41,20 @@ def refresh_long_lived_token(token):
 
 def github_encrypt_and_put_secret(repo, pat, secret_name, secret_value):
     if not HAS_PYNACL:
-        print("PyNaCl not installed; cannot update GitHub secret automatically. Install 'pynacl' if you want this feature.")
+        print("PyNaCl not installed; cannot update GitHub secret automatically.")
         return False
-
     headers = {"Authorization": f"token {pat}", "Accept": "application/vnd.github+json"}
     url_key = f"https://api.github.com/repos/{repo}/actions/secrets/public-key"
     r = requests.get(url_key, headers=headers, timeout=20)
     if r.status_code != 200:
         print(f"Failed to fetch public key from GitHub: {r.status_code} {r.text}")
         return False
-
     j = r.json()
     key_id = j.get("key_id")
     key = j.get("key")
     if not key_id or not key:
         print("Invalid public key response from GitHub:", j)
         return False
-
     try:
         public_key = public.PublicKey(base64.b64decode(key), encoder=encoding.RawEncoder())
         sealed_box = public.SealedBox(public_key)
@@ -69,7 +63,6 @@ def github_encrypt_and_put_secret(repo, pat, secret_name, secret_value):
     except Exception as e:
         print("Encryption failed:", e)
         return False
-
     put_url = f"https://api.github.com/repos/{repo}/actions/secrets/{secret_name}"
     payload = {"encrypted_value": encrypted_value, "key_id": key_id}
     r2 = requests.put(put_url, headers=headers, data=json.dumps(payload), timeout=20)

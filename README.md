@@ -1,17 +1,11 @@
-# Instagram auto-publish with on-demand ngrok hosting and generated videos (fixed)
+# Fixed: Install moviepy using python -m pip in GitHub Actions
 
-This repo fixes the previous moviepy import error by installing moviepy and imageio-ffmpeg and avoiding ImageMagick/TextClip in the generator.
+This ZIP updates the workflow to use `python -m pip install ...` ensuring packages are installed into the same Python interpreter the steps run with. It also adds debug output to check that `moviepy` is importable.
 
-## What changed
-- `generate_video.py` no longer uses TextClip (no ImageMagick dependency).
-- Workflow installs `moviepy`, `imageio`, `imageio-ffmpeg` via pip and `ffmpeg` via apt, and sets `IMAGEIO_FFMPEG_BINARY` when generating video.
+### Key fixes
+- Use `actions/setup-python` and then `python -m pip install ...` (not plain `pip`) so the correct interpreter gets the packages.
+- Install dependencies: moviepy, imageio, imageio-ffmpeg, pillow, numpy.
+- Set `IMAGEIO_FFMPEG_BINARY=/usr/bin/ffmpeg` when generating to ensure imageio uses system ffmpeg.
+- Added a debug step that prints python version, pip version, and whether `moviepy` can be found.
 
-## Files included
-- `generate_video.py` — generates `video.mp4`, `thumb_1.jpg`, `thumb_2.jpg`, ... and `video_and_thumbs.zip`.
-- `publish_reel.py` — publishes to IG, refreshes token and can auto-update LONG_LIVED_TOKEN secret if GH_PAT is provided.
-- `.github/workflows/ngrok_publish_with_generate.yml` — scheduled every 5 minutes (cron `*/5 * * * *`) and runs the full flow.
-- `.env.sample` — local testing variables.
-
-## Setup
-Add repository secrets: `IG_USER_ID`, `LONG_LIVED_TOKEN`, `NGROK_AUTHTOKEN`. Optionally add `GH_PAT`.
-
+If you still get `ModuleNotFoundError`, check the workflow logs for the debug step — it will show whether `moviepy` was installed into the Python used by the runner.
