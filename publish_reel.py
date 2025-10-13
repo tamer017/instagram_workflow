@@ -1,4 +1,4 @@
-# publish_reel.py
+# publish_reel.py (concise)
 import time, requests, os, sys, json
 
 IG_USER_ID = os.environ.get("IG_USER_ID")

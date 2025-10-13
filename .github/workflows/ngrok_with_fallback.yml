@@ -1,0 +1,123 @@
+name: Publish via ngrok with localtunnel fallback
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '*/5 * * * *'
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python and install deps
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install system deps and Python packages
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y jq unzip curl ffmpeg nodejs npm
+          python -m pip install --upgrade pip
+          python -m pip install pillow requests
+
+      - name: Generate video + thumbnails
+        run: |
+          mkdir -p tmp_video outputs
+          python generate_video_ffmpeg.py tmp_video 6 30 3
+          ls -l tmp_video
+
+      - name: Start local HTTP server
+        run: |
+          python -m http.server 8000 --directory tmp_video >/tmp/http.log 2>&1 &
+          echo $! > /tmp/http.pid
+          sleep 1
+
+      - name: Try start ngrok (if available) otherwise fallback to localtunnel
+        env:
+          NGROK_AUTHTOKEN: ${{ secrets.NGROK_AUTHTOKEN }}
+        run: |
+          set -euo pipefail
+          echo "Attempting to download ngrok (may be old)"
+          curl -fsSL https://bin.equinox.io/c/4VmDzA7iaHb/ngrok-stable-linux-amd64.zip -o /tmp/ngrok.zip || true
+          if [ -f /tmp/ngrok.zip ]; then unzip -o /tmp/ngrok.zip -d /tmp || true; chmod +x /tmp/ngrok || true; fi
+          NGROK_OK=false
+          if [ -n "${NGROK_AUTHTOKEN:-}" ]; then
+            if [ -x /tmp/ngrok ]; then
+              echo "Configuring ngrok token and starting tunnel..."
+              /tmp/ngrok authtoken "$NGROK_AUTHTOKEN" || true
+              /tmp/ngrok http 8000 --log=stdout > /tmp/ngrok.log 2>&1 &
+              echo $! > /tmp/ngrok.pid
+              for i in {1..15}; do
+                sleep 1
+                if curl -s http://127.0.0.1:4040/api/tunnels >/tmp/tunnels.json 2>/dev/null; then
+                  PUB=$(jq -r '.tunnels[0].public_url' /tmp/tunnels.json 2>/dev/null || true)
+                  if [ -n "$PUB" ] && [ "$PUB" != "null" ]; then
+                    echo "NGROK_URL=$PUB" > /tmp/public_url.txt
+                    NGROK_OK=true
+                    break
+                  fi
+                fi
+              done
+              if grep -q "ERR_NGROK_121" /tmp/ngrok.log 2>/dev/null; then
+                echo "ngrok auth/version error detected; will fallback to localtunnel."
+                NGROK_OK=false
+                if [ -f /tmp/ngrok.pid ]; then kill $(cat /tmp/ngrok.pid) || true; fi
+              fi
+            fi
+          fi
+          if [ "$NGROK_OK" = "true" ]; then
+            echo "Using ngrok public URL: $(cat /tmp/public_url.txt)"
+          else
+            echo "Starting localtunnel fallback (npm install -g localtunnel)"
+            npm install -g localtunnel
+            lt --port 8000 > /tmp/lt.log 2>&1 &
+            echo $! > /tmp/lt.pid
+            for i in {1..15}; do
+              sleep 1
+              URL=$(grep -o 'https://[^ ]*loca.lt' /tmp/lt.log | head -n1 || true)
+              if [ -n "$URL" ]; then
+                echo "LT_URL=$URL" > /tmp/public_url.txt
+                break
+              fi
+            done
+            if [ ! -f /tmp/public_url.txt ]; then
+              echo "Failed to get a public URL from both ngrok and localtunnel. Dumping logs..."
+              tail -n +1 /tmp/ngrok.log || true
+              tail -n +1 /tmp/lt.log || true
+              exit 1
+            fi
+            echo "Using localtunnel public URL: $(cat /tmp/public_url.txt)"
+          fi
+
+      - name: Publish to Instagram
+        env:
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+          LONG_LIVED_TOKEN: ${{ secrets.LONG_LIVED_TOKEN }}
+        run: |
+          PUB=$(cat /tmp/public_url.txt)
+          VIDEO_URL="${PUB}/video.mp4"
+          THUMB_URL="${PUB}/thumb_1.jpg"
+          echo "Publishing with VIDEO_URL=$VIDEO_URL THUMB_URL=$THUMB_URL"
+          python publish_reel.py "$VIDEO_URL" "$THUMB_URL"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated-media
+          path: tmp_video/video_and_thumbs.zip
+
+      - name: Teardown always
+        if: always()
+        run: |
+          if [ -f /tmp/ngrok.pid ]; then kill $(cat /tmp/ngrok.pid) || true; fi
+          if [ -f /tmp/lt.pid ]; then kill $(cat /tmp/lt.pid) || true; fi
+          if [ -f /tmp/http.pid ]; then kill $(cat /tmp/http.pid) || true; fi
+          sleep 1
+          echo "Teardown complete."
