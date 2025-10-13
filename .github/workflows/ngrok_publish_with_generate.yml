@@ -1,8 +1,8 @@
-name: Publish via ngrok (temporary public video) - every 5 minutes (install fix)
+name: Publish via ngrok (ffmpeg generator) - every 5 minutes
 
 on:
   schedule:
-    - cron: '*/5 * * * *'   # every 5 minutes (UTC)
+    - cron: '*/5 * * * *'
   workflow_dispatch:
 
 permissions:
@@ -15,39 +15,24 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Python
+      - name: Setup Python and install deps
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
 
-      - name: Install system deps and Python packages (using python -m pip)
+      - name: Install system deps and Python packages
         run: |
           sudo apt-get update -y
           sudo apt-get install -y jq unzip curl ffmpeg
           python -m pip install --upgrade pip
-          python -m pip install moviepy imageio imageio-ffmpeg pillow numpy requests pynacl
+          python -m pip install pillow requests pynacl
 
-      - name: Debug: python & pip info
-        run: |
-          python -V
-          which python
-          python -m pip --version
-          python -m pip show moviepy || true
-          python -c "import sys; print('sys.path=', sys.path)"
-          python -c "import importlib; print('can import moviepy?', importlib.util.find_spec('moviepy') is not None)"
-
-      - name: Download ngrok
-        run: |
-          curl -fsSL https://bin.equinox.io/c/4VmDzA7iaHb/ngrok-stable-linux-amd64.zip -o /tmp/ngrok.zip
-          unzip -o /tmp/ngrok.zip -d /tmp
-          chmod +x /tmp/ngrok
-
-      - name: Generate video + thumbnails
+      - name: Generate video + thumbnails (Pillow + ffmpeg)
         env:
           IMAGEIO_FFMPEG_BINARY: /usr/bin/ffmpeg
         run: |
           mkdir -p tmp_video outputs
-          python generate_video.py tmp_video 6 30 3
+          python generate_video_ffmpeg.py tmp_video 6 30 3
           ls -l tmp_video
 
       - name: Start local HTTP server serving video
@@ -55,7 +40,12 @@ jobs:
           python -m http.server 8000 --directory tmp_video >/tmp/http.log 2>&1 &
           echo $! > /tmp/http.pid
           sleep 1
-          echo "HTTP server started (PID $(cat /tmp/http.pid))"
+
+      - name: Download ngrok
+        run: |
+          curl -fsSL https://bin.equinox.io/c/4VmDzA7iaHb/ngrok-stable-linux-amd64.zip -o /tmp/ngrok.zip
+          unzip -o /tmp/ngrok.zip -d /tmp
+          chmod +x /tmp/ngrok
 
       - name: Start ngrok tunnel and get public URL
         env:
@@ -81,7 +71,7 @@ jobs:
             exit 1
           fi
 
-      - name: Publish to Instagram via script (try thumbnails)
+      - name: Publish to Instagram via script
         env:
           IG_USER_ID: ${{ secrets.IG_USER_ID }}
           LONG_LIVED_TOKEN: ${{ secrets.LONG_LIVED_TOKEN }}
@@ -103,7 +93,7 @@ jobs:
           name: generated-media
           path: tmp_video/video_and_thumbs.zip
 
-      - name: Teardown (stop ngrok and http server)
+      - name: Teardown
         if: always()
         run: |
           if [ -f /tmp/ngrok.pid ]; then kill $(cat /tmp/ngrok.pid) || true; fi

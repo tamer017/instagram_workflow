@@ -1,11 +1,12 @@
-# Fixed: Install moviepy using python -m pip in GitHub Actions
+# Instagram auto-publish with Pillow + ffmpeg generator and ngrok
 
-This ZIP updates the workflow to use `python -m pip install ...` ensuring packages are installed into the same Python interpreter the steps run with. It also adds debug output to check that `moviepy` is importable.
+This repo generates a color-changing vertical video using Pillow-generated frames and ffmpeg (no moviepy).
+It exposes the video temporarily via ngrok, publishes it to Instagram Reels, uploads a zipped artifact, then tears down the tunnel.
 
-### Key fixes
-- Use `actions/setup-python` and then `python -m pip install ...` (not plain `pip`) so the correct interpreter gets the packages.
-- Install dependencies: moviepy, imageio, imageio-ffmpeg, pillow, numpy.
-- Set `IMAGEIO_FFMPEG_BINARY=/usr/bin/ffmpeg` when generating to ensure imageio uses system ffmpeg.
-- Added a debug step that prints python version, pip version, and whether `moviepy` can be found.
+Files:
+- generate_video_ffmpeg.py  -- generates frames, builds mp4 with ffmpeg, extracts thumbnails, zips outputs
+- publish_reel.py           -- posts to Instagram (refreshes token)
+- .github/workflows/ngrok_publish_with_generate.yml  -- workflow scheduled every 5 minutes (or run manually)
+- README.md, .env.sample
 
-If you still get `ModuleNotFoundError`, check the workflow logs for the debug step — it will show whether `moviepy` was installed into the Python used by the runner.
+Setup: add repo secrets IG_USER_ID, LONG_LIVED_TOKEN, NGROK_AUTHTOKEN (optional GH_PAT).
