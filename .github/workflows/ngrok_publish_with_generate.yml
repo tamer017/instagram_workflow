@@ -1,4 +1,4 @@
-name: Publish via ngrok (temporary public video) - every 5 minutes
+name: Publish via ngrok (temporary public video) - every 5 minutes (fixed)
 
 on:
   schedule:
@@ -20,7 +20,7 @@ jobs:
           python -m pip install --upgrade pip
           sudo apt-get update -y
           sudo apt-get install -y jq unzip curl ffmpeg
-          pip install moviepy requests pynacl imageio-ffmpeg
+          pip install moviepy imageio imageio-ffmpeg requests pynacl
 
       - name: Download ngrok
         run: |
@@ -29,6 +29,8 @@ jobs:
           chmod +x /tmp/ngrok
 
       - name: Generate video + thumbnails
+        env:
+          IMAGEIO_FFMPEG_BINARY: /usr/bin/ffmpeg
         run: |
           mkdir -p tmp_video outputs
           python generate_video.py tmp_video 6 30 3
@@ -48,7 +50,7 @@ jobs:
           /tmp/ngrok authtoken "$NGROK_AUTHTOKEN"
           /tmp/ngrok http 8000 --log=stdout > /tmp/ngrok.log 2>&1 &
           echo $! > /tmp/ngrok.pid
-          for i in {1..15}; do
+          for i in {1..20}; do
             sleep 1
             if curl -s http://127.0.0.1:4040/api/tunnels >/tmp/tunnels.json 2>/dev/null; then
               PUB=$(jq -r '.tunnels[0].public_url' /tmp/tunnels.json 2>/dev/null || true)
@@ -77,7 +79,6 @@ jobs:
         run: |
           NGROK_URL=$(cat /tmp/ngrok_url.txt)
           VIDEO_URL="${NGROK_URL}/video.mp4"
-          # pick first thumbnail as thumbnail_url (hosted via same tunnel)
           THUMB_URL="${NGROK_URL}/thumb_1.jpg"
           echo "Using VIDEO_URL=$VIDEO_URL and THUMB_URL=$THUMB_URL"
           python publish_reel.py "$VIDEO_URL" "$THUMB_URL"

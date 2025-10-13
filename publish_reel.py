@@ -88,7 +88,6 @@ def create_video_container(ig_user_id, token, video_url, caption, thumbnail_url=
         "caption": caption,
         "access_token": token
     }
-    # If a thumbnail URL is provided, include it (some API versions may ignore it; log a warning if present)
     if thumbnail_url:
         payload["thumbnail_url"] = thumbnail_url
     r = requests.post(url, params=payload, timeout=30)
@@ -116,7 +115,6 @@ def publish_media(ig_user_id, token, creation_id):
     return media_id
 
 def main():
-    # video_url CLI arg > env var > default
     video_url = None
     thumb_url = None
     if len(sys.argv) >= 2:
@@ -132,11 +130,9 @@ def main():
         print("ERROR: IG_USER_ID and LONG_LIVED_TOKEN must be set as environment variables.")
         sys.exit(2)
 
-    # refresh token
     new_token = refresh_long_lived_token(LONG_LIVED_TOKEN)
     token_in_use = new_token or LONG_LIVED_TOKEN
 
-    # attempt to update secret if in Actions and GH_PAT provided
     if GITHUB_REPOSITORY and GH_PAT:
         if new_token and new_token != LONG_LIVED_TOKEN:
             print("Attempting to update repository secret with the refreshed token (won't print token).")
@@ -158,7 +154,6 @@ def main():
         print("Using thumbnail URL:", thumb_url)
     creation_id = create_video_container(IG_USER_ID, token_in_use, video_url, CAPTION, thumbnail_url=thumb_url)
 
-    # poll
     poll_url = f"https://graph.facebook.com/v17.0/{creation_id}"
     poll_params = {"fields": "status_code", "access_token": token_in_use}
 

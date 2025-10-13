@@ -12,32 +12,24 @@ Defaults:
 """
 import os
 import sys
-from moviepy.editor import ColorClip, TextClip, CompositeVideoClip, concatenate_videoclips
+from moviepy.editor import ColorClip, concatenate_videoclips, VideoFileClip
 import random
 import time
 
-def make_color_clip(color, w, h, duration):
-    return ColorClip(size=(w,h), color=color).set_duration(duration)
-
-def make_text_clip(text, w, fontsize=90, duration=0.5):
-    txt = TextClip(text, fontsize=fontsize, color='white', size=(w-100,None), method='caption')
-    txt = txt.set_position(('center','center')).set_duration(duration)
-    return txt
-
 def create_video(out_dir, duration=6, fps=30):
     w, h = 1080, 1920
-    # create a few color clips and concatenate for a simple color-changing video
+    # create multiple color segments
+    seg_count = max(3, int(duration))  # one color per second at least
+    seg_dur = duration / seg_count
     segments = []
-    seg_dur = max(0.5, duration / 6.0)
-    for i in range(int(duration / seg_dur) + 1):
+    for i in range(seg_count):
         # generate a random bright-ish color
-        color = tuple(random.randint(30, 230) for _ in range(3))
-        clip = make_color_clip(color, w, h, seg_dur)
+        color = tuple(random.randint(50, 220) for _ in range(3))
+        clip = ColorClip(size=(w,h), color=color).set_duration(seg_dur)
         segments.append(clip)
     video = concatenate_videoclips(segments).set_duration(duration)
-    # overlay a timestamp text that changes per second
-    # (moviepy TextClip rendering can be slow for many frames so keep it simple)
     out_path = os.path.join(out_dir, "video.mp4")
+    # write using ffmpeg through imageio-ffmpeg (moviepy)
     video.write_videofile(
         out_path,
         fps=fps,
@@ -47,10 +39,15 @@ def create_video(out_dir, duration=6, fps=30):
         verbose=False,
         logger=None
     )
+    # close clips to release resources
+    for c in segments:
+        try:
+            c.close()
+        except Exception:
+            pass
     return out_path
 
 def extract_thumbnails(video_path, out_dir, count=3):
-    from moviepy.editor import VideoFileClip
     clip = VideoFileClip(video_path)
     duration = clip.duration
     thumbs = []
@@ -60,7 +57,10 @@ def extract_thumbnails(video_path, out_dir, count=3):
         clip.save_frame(frame_path, t)
         thumbs.append(frame_path)
     clip.reader.close()
-    clip.audio = None
+    try:
+        clip.close()
+    except Exception:
+        pass
     return thumbs
 
 def zip_outputs(out_dir):
