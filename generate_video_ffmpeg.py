@@ -13,7 +13,7 @@ def color_for_frame(i, total):
     b = int(128 + 127 * math.sin(2*math.pi*(t + 0.66)))
     return (r, g, b)
 
-def generate_frames(out_dir, duration=6, fps=30):
+def generate_frames(out_dir, duration=4, fps=24):
     frames_dir = os.path.join(out_dir, "frames")
     os.makedirs(frames_dir, exist_ok=True)
     total_frames = int(duration * fps)
@@ -24,7 +24,7 @@ def generate_frames(out_dir, duration=6, fps=30):
         img.save(path, format='PNG')
     return frames_dir, total_frames
 
-def build_video_with_ffmpeg(frames_dir, out_video, fps=30):
+def build_video_with_ffmpeg(frames_dir, out_video, fps=24):
     cmd = [
         "ffmpeg", "-y",
         "-framerate", str(fps),
@@ -62,8 +62,8 @@ def zip_outputs(out_dir):
 
 def main():
     out_dir = sys.argv[1] if len(sys.argv) >= 2 else "outputs"
-    duration = float(sys.argv[2]) if len(sys.argv) >= 3 else 6.0
-    fps = int(sys.argv[3]) if len(sys.argv) >= 4 else 30
+    duration = float(sys.argv[2]) if len(sys.argv) >= 3 else 4.0
+    fps = int(sys.argv[3]) if len(sys.argv) >= 4 else 24
     num_thumbs = int(sys.argv[4]) if len(sys.argv) >= 5 else 3
 
     os.makedirs(out_dir, exist_ok=True)

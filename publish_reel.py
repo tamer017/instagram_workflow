@@ -32,18 +32,9 @@ def create_video_container(ig_user_id, token, video_url, caption, thumbnail_url=
         raise RuntimeError("Failed to create container: %r" % (data,))
     return cid
 
-def publish_media(ig_user_id, token, creation_id):
-    url = f"https://graph.facebook.com/v17.0/{ig_user_id}/media_publish"
-    params = {"creation_id":creation_id,"access_token":token}
-    r = requests.post(url, params=params, timeout=30)
-    r.raise_for_status()
-    data = r.json()
-    print("publish response:", data)
-    return data.get("id")
-
 def poll_until_finished(creation_id, token, max_wait=MAX_WAIT_SECONDS, interval=INTERVAL_SECONDS):
     poll_url = f"https://graph.facebook.com/v17.0/{creation_id}"
-    params = {"fields":"status_code","access_token":token}
+    params = {"fields":"status_code,processing_progress,errors","access_token":token}
     waited=0
     while waited <= max_wait:
         r = requests.get(poll_url, params=params, timeout=30)
@@ -58,6 +49,15 @@ def poll_until_finished(creation_id, token, max_wait=MAX_WAIT_SECONDS, interval=
         time.sleep(interval)
         waited += interval
     raise RuntimeError("Timed out waiting for container")
+
+def publish_media(ig_user_id, token, creation_id):
+    url = f"https://graph.facebook.com/v17.0/{ig_user_id}/media_publish"
+    params = {"creation_id":creation_id,"access_token":token}
+    r = requests.post(url, params=params, timeout=30)
+    r.raise_for_status()
+    data = r.json()
+    print("publish response:", data)
+    return data.get("id")
 
 def main():
     video_url = sys.argv[1] if len(sys.argv) >= 2 else os.environ.get("VIDEO_URL", DEFAULT_VIDEO_URL)
