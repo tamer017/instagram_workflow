@@ -1,11 +1,10 @@
-name: Publish via ngrok only (secrets from GitHub, auto-update token if GH_PAT provided)
+name: Publish thumbnail IMAGE via Facebook Graph (ngrok v3, secrets)
 
 on:
   workflow_dispatch:
 
 permissions:
   contents: read
-  actions: write  # required if you want to let the workflow update repo secrets via GH_PAT (the PUT uses token not workflow identity)
 
 jobs:
   publish:
@@ -27,7 +26,7 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Create venv and install deps (use cached pip)
+      - name: Create venv and install deps
         run: |
           python -m venv .venv
           . .venv/bin/activate
@@ -39,7 +38,7 @@ jobs:
           sudo apt-get update -y
           sudo apt-get install -y jq unzip curl ffmpeg
 
-      - name: Download & install ngrok v3 binary (explicit v3 link)
+      - name: Download & install ngrok v3 binary
         env:
           NGROK_DOWNLOAD_URL: "https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-amd64.tgz"
         run: |
@@ -95,26 +94,23 @@ jobs:
             exit 1
           fi
 
-      - name: Verify public URL and publish (reads secrets from Actions)
+      - name: Verify thumbnail URL and publish as IMAGE (reads secrets)
         env:
           IG_USER_ID: ${{ secrets.IG_USER_ID }}
           LONG_LIVED_TOKEN: ${{ secrets.LONG_LIVED_TOKEN }}
-          GH_PAT: ${{ secrets.GH_PAT }}   # optional: used to update the secret after refresh
-          GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           PUB=$(cat /tmp/public_url.txt)
           PUB=$(echo "$PUB" | tr -d '\r\n')
-          VIDEO_URL="${PUB}/video.mp4"
           THUMB_URL="${PUB}/thumb_1.jpg"
-          echo "Checking VIDEO_URL=$VIDEO_URL"
-          if ! curl -I --max-time 10 "$VIDEO_URL" | head -n1 | grep -q 'HTTP/'; then
-            echo "Video URL not reachable or timed out. Dumping logs:"
+          echo "Checking THUMB_URL=$THUMB_URL"
+          if ! curl -I --max-time 10 "$THUMB_URL" | head -n1 | grep -q 'HTTP/'; then
+            echo "Thumb URL not reachable or timed out. Dumping logs:"
             tail -n 200 /tmp/http.log || true
             cat /tmp/ngrok.log || true
             exit 1
           fi
           . .venv/bin/activate
-          python publish_reel_secrets.py "$VIDEO_URL" "$THUMB_URL"
+          python publish_image_secrets.py "$THUMB_URL" "Automated image post from workflow"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4

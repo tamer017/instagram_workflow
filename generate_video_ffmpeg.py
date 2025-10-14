@@ -1,4 +1,5 @@
 # generate_video_ffmpeg.py
+# Generates a short vertical MP4 and thumbnails (thumb_1.jpg used as image upload)
 import os, sys, math, subprocess
 from PIL import Image
 
@@ -7,9 +8,9 @@ def make_frame(color, size=(1080,1920)):
 
 def color_for_frame(i, total):
     t = float(i) / max(1, total-1)
-    r = int(128 + 127 * math.sin(2*3.14159*(t + 0.0)))
-    g = int(128 + 127 * math.sin(2*3.14159*(t + 0.33)))
-    b = int(128 + 127 * math.sin(2*3.14159*(t + 0.66)))
+    r = int(128 + 127 * math.sin(2*math.pi*(t + 0.0)))
+    g = int(128 + 127 * math.sin(2*math.pi*(t + 0.33)))
+    b = int(128 + 127 * math.sin(2*math.pi*(t + 0.66)))
     return (r, g, b)
 
 def generate_frames(out_dir, duration=2, fps=24):

@@ -1,9 +1,20 @@
-# ngrok-only repo (reads LONG_LIVED_TOKEN from GitHub Secrets, optional auto-update)
+# Final repo: Publish thumbnail IMAGE via Facebook Graph API (ngrok v3, secrets)
 
-This version reads `LONG_LIVED_TOKEN` and `IG_USER_ID` directly from GitHub Actions secrets (in the workflow), and the publish script can optionally write a refreshed token back to the repository secrets if you provide `GH_PAT` as a secret (a personal access token with `repo` scope).
+This final ZIP contains a full GitHub Actions-based workflow to:
+- generate a short vertical color-changing video and thumbnails,
+- serve them via a local HTTP server on the runner,
+- expose the runner via ngrok v3 (requires NGROK_AUTHTOKEN secret),
+- publish the thumbnail (thumb_1.jpg) as an IMAGE post to Instagram using the Facebook Graph API endpoints:
+  - POST /{ig_user_id}/media with image_url
+  - poll the container and POST /{ig_user_id}/media_publish
+- reads `IG_USER_ID` and `LONG_LIVED_TOKEN` from GitHub Actions secrets (workflow injects them into env)
 
-How it works:
-- Workflow injects secrets into the job environment and calls publish_reel_secrets.py.
-- publish_reel_secrets.py validates the token via /me, attempts a refresh if needed, and if refresh succeeds and `GH_PAT` + `GITHUB_REPOSITORY` are present, it encrypts and updates the repository secret `LONG_LIVED_TOKEN` using the GitHub Secrets API.
+Usage:
+1. Extract and push this repo to your GitHub repository root.
+2. Add repository secrets: `IG_USER_ID`, `LONG_LIVED_TOKEN`, `NGROK_AUTHTOKEN`.
+3. Run the workflow "Publish thumbnail IMAGE via Facebook Graph (ngrok v3, secrets)" manually (Actions -> Run workflow).
+4. Inspect logs for create/poll/publish responses. The publish step prints the responses.
 
-Security note: Only provide `GH_PAT` if you understand the security implications — treat it as a high-privilege secret.
+Notes:
+- Make sure LONG_LIVED_TOKEN is a valid Instagram long-lived token (test with /me).
+- IG_USER_ID must be the Instagram Business Account numeric ID.
