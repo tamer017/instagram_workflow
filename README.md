@@ -1,13 +1,16 @@
-# Final fix: debug publish + pip cache + ngrok v3 + venv
+# ngrok-only repo (no localtunnel)
 
-This repo improves reliability and speed:
-- uses Python venv (.venv) to isolate installs and speed up repeated runs
-- caches pip (~/.cache/pip) across runs with actions/cache to avoid reinstalling packages each time
-- downloads an explicit ngrok v3 tarball and runs it (avoids ERR_NGROK_121)
-- falls back to localtunnel if ngrok fails
-- publish_reel_debug.py checks token validity, prints full API responses on error, and aborts safely if token invalid
-- generates a very short 2s video to speed up runs (adjustable)
+This repo runs a GitHub Actions workflow that:
+- Generates a short color-changing vertical video using Pillow + ffmpeg
+- Serves it on the runner and exposes it via ngrok v3 (requires NGROK_AUTHTOKEN)
+- Publishes the video to Instagram Reels via the Instagram Graph API
+- Uploads the generated ZIP as an artifact and tears down ngrok
 
-**Before running**: add GitHub secrets `IG_USER_ID` and `LONG_LIVED_TOKEN`. Optionally add `NGROK_AUTHTOKEN` to use ngrok.
+Important: this workflow **requires** NGROK_AUTHTOKEN to be set in the repo secrets (no fallback).
 
-**Testing**: use workflow_dispatch to run manually; inspect logs. If publish fails due to token, the workflow will print detailed responses so you can see why (common cause: expired/invalid token).
+Files included:
+- generate_video_ffmpeg.py
+- publish_reel_debug.py
+- .github/workflows/ngrok_only.yml
+- token_help.md (how to get LONG_LIVED_TOKEN)
+- requirements.txt

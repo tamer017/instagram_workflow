@@ -1,9 +1,4 @@
-# publish_reel_debug.py
-"""Improved publish script:
-- checks token validity before attempting refresh/create
-- prints full HTTP responses on errors for debugging
-- shows container fields (errors, processing_progress) when available
-"""
+# publish_reel_debug.py (same as before)
 import time, requests, os, sys, json
 
 IG_USER_ID = os.environ.get("IG_USER_ID")
@@ -55,7 +50,6 @@ def check_token(token):
 def refresh_long_lived_token(token):
     try:
         r = requests.get("https://graph.instagram.com/refresh_access_token", params={"grant_type":"ig_refresh_token","access_token":token}, timeout=20)
-        # do not r.raise_for_status() here so we can print body on 400
         if r.status_code != 200:
             print("Refresh endpoint returned non-200:", r.status_code, r.text)
             return token
@@ -85,7 +79,6 @@ def poll_until_finished(creation_id, token, max_wait=MAX_WAIT_SECONDS, interval=
     while waited <= max_wait:
         try:
             r = requests.get(poll_url, params=params, timeout=30)
-            # print full raw response for debugging
             print("poll response code:", r.status_code, "body:", r.text)
             r.raise_for_status()
             j = r.json()
@@ -120,22 +113,18 @@ def main():
         print("IG_USER_ID and LONG_LIVED_TOKEN must be provided via env/secrets.")
         sys.exit(2)
 
-    # check token before proceeding
     if not check_token(LONG_LIVED_TOKEN):
         print("WARNING: Provided LONG_LIVED_TOKEN appears invalid/expired. Attempting refresh (may fail without correct token).")
     token = refresh_long_lived_token(LONG_LIVED_TOKEN)
-    # re-check
     if not check_token(token):
         print("ERROR: Token still invalid after refresh. Aborting to avoid hitting API with bad token.")
         sys.exit(3)
 
-    # proceed to create container
     creation_id = create_video_container(IG_USER_ID, token, video_url, CAPTION, thumbnail_url=thumb_url)
     if not creation_id:
         print("Failed to create media container; aborting.")
         sys.exit(4)
 
-    # poll and publish
     poll_info = poll_until_finished(creation_id, token)
     print("Poll info:", json.dumps(poll_info, indent=2))
     media_id = publish_media(IG_USER_ID, token, creation_id)
