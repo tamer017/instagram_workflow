@@ -1,16 +1,9 @@
-# ngrok-only repo (no localtunnel)
+# ngrok-only repo (reads LONG_LIVED_TOKEN from GitHub Secrets, optional auto-update)
 
-This repo runs a GitHub Actions workflow that:
-- Generates a short color-changing vertical video using Pillow + ffmpeg
-- Serves it on the runner and exposes it via ngrok v3 (requires NGROK_AUTHTOKEN)
-- Publishes the video to Instagram Reels via the Instagram Graph API
-- Uploads the generated ZIP as an artifact and tears down ngrok
+This version reads `LONG_LIVED_TOKEN` and `IG_USER_ID` directly from GitHub Actions secrets (in the workflow), and the publish script can optionally write a refreshed token back to the repository secrets if you provide `GH_PAT` as a secret (a personal access token with `repo` scope).
 
-Important: this workflow **requires** NGROK_AUTHTOKEN to be set in the repo secrets (no fallback).
+How it works:
+- Workflow injects secrets into the job environment and calls publish_reel_secrets.py.
+- publish_reel_secrets.py validates the token via /me, attempts a refresh if needed, and if refresh succeeds and `GH_PAT` + `GITHUB_REPOSITORY` are present, it encrypts and updates the repository secret `LONG_LIVED_TOKEN` using the GitHub Secrets API.
 
-Files included:
-- generate_video_ffmpeg.py
-- publish_reel_debug.py
-- .github/workflows/ngrok_only.yml
-- token_help.md (how to get LONG_LIVED_TOKEN)
-- requirements.txt
+Security note: Only provide `GH_PAT` if you understand the security implications — treat it as a high-privilege secret.

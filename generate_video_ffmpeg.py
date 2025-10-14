@@ -1,16 +1,15 @@
 # generate_video_ffmpeg.py
 import os, sys, math, subprocess
 from PIL import Image
-import random
 
 def make_frame(color, size=(1080,1920)):
     return Image.new('RGB', size, color)
 
 def color_for_frame(i, total):
     t = float(i) / max(1, total-1)
-    r = int(128 + 127 * math.sin(2*math.pi*(t + 0.0)))
-    g = int(128 + 127 * math.sin(2*math.pi*(t + 0.33)))
-    b = int(128 + 127 * math.sin(2*math.pi*(t + 0.66)))
+    r = int(128 + 127 * math.sin(2*3.14159*(t + 0.0)))
+    g = int(128 + 127 * math.sin(2*3.14159*(t + 0.33)))
+    b = int(128 + 127 * math.sin(2*3.14159*(t + 0.66)))
     return (r, g, b)
 
 def generate_frames(out_dir, duration=2, fps=24):
@@ -37,6 +36,7 @@ def build_video_with_ffmpeg(frames_dir, out_video, fps=24):
     subprocess.check_call(cmd)
 
 def extract_thumbnails(frames_dir, out_dir, count=3, total_frames=None):
+    from PIL import Image
     os.makedirs(out_dir, exist_ok=True)
     if total_frames is None:
         files = sorted([f for f in os.listdir(frames_dir) if f.endswith('.png')])
