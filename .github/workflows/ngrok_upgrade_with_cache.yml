@@ -1,0 +1,153 @@
+name: Publish via ngrok v3 (cache + venv) with localtunnel fallback and debug publish
+
+on:
+  workflow_dispatch:
+  # schedule: - cron: '*/5 * * * *'   # disabled by default for safety
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Create venv and install deps (use cached pip)
+        run: |
+          python -m venv .venv
+          . .venv/bin/activate
+          python -m pip install --upgrade pip
+          python -m pip install --no-cache-dir -r requirements.txt
+
+      - name: Install system deps (ffmpeg + node for localtunnel)
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y jq unzip curl ffmpeg nodejs npm
+
+      - name: Download & install ngrok v3 binary (explicit v3 link)
+        env:
+          NGROK_DOWNLOAD_URL: "https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-amd64.tgz"
+        run: |
+          set -euo pipefail
+          echo "Downloading ngrok v3 from $NGROK_DOWNLOAD_URL"
+          curl -fsSL "$NGROK_DOWNLOAD_URL" -o /tmp/ngrok.tgz
+          sudo tar -xzf /tmp/ngrok.tgz -C /usr/local/bin || sudo tar -xzf /tmp/ngrok.tgz -C /tmp
+          if [ -x /usr/local/bin/ngrok ]; then NGROK_BIN=/usr/local/bin/ngrok; else NGROK_BIN=/tmp/ngrok; fi
+          echo "$NGROK_BIN" > /tmp/ngrok_bin.txt
+          $NGROK_BIN version || true
+
+      - name: Generate video + thumbnails (fast)
+        run: |
+          mkdir -p tmp_video outputs
+          . .venv/bin/activate
+          python generate_video_ffmpeg.py tmp_video 2 24 3
+          ls -l tmp_video
+
+      - name: Start local HTTP server
+        run: |
+          python -m http.server 8000 --directory tmp_video >/tmp/http.log 2>&1 &
+          echo $! > /tmp/http.pid
+          sleep 1
+
+      - name: Start ngrok (use v3) and fallback to localtunnel if blocked
+        env:
+          NGROK_AUTHTOKEN: ${{ secrets.NGROK_AUTHTOKEN }}
+        run: |
+          set -euo pipefail
+          NGROK_BIN=$(cat /tmp/ngrok_bin.txt)
+          NGROK_OK=false
+          if [ -n "${NGROK_AUTHTOKEN:-}" ] && [ -x "$NGROK_BIN" ]; then
+            echo "Configuring ngrok authtoken and starting tunnel via $NGROK_BIN"
+            $NGROK_BIN authtoken "$NGROK_AUTHTOKEN" || true
+            $NGROK_BIN http 8000 --log=stdout > /tmp/ngrok.log 2>&1 &
+            echo $! > /tmp/ngrok.pid
+            for i in {1..20}; do
+              sleep 1
+              if curl -s http://127.0.0.1:4040/api/tunnels >/tmp/tunnels.json 2>/dev/null; then
+                PUB=$(jq -r '.tunnels[0].public_url' /tmp/tunnels.json 2>/dev/null || true)
+                if [ -n "$PUB" ] && [ "$PUB" != "null" ]; then
+                  echo "$PUB" > /tmp/public_url.txt
+                  NGROK_OK=true
+                  break
+                fi
+              fi
+            done
+            if grep -q "ERR_NGROK_121" /tmp/ngrok.log 2>/dev/null; then
+              echo "ngrok auth/version error detected; will fallback to localtunnel."
+              NGROK_OK=false
+              if [ -f /tmp/ngrok.pid ]; then kill $(cat /tmp/ngrok.pid) || true; fi
+            fi
+          fi
+          if [ "$NGROK_OK" = "true" ]; then
+            echo "Using ngrok public URL: $(cat /tmp/public_url.txt)"
+          else
+            echo "Starting localtunnel fallback (npm install -g localtunnel)"
+            npm install -g localtunnel
+            lt --port 8000 > /tmp/lt.log 2>&1 &
+            echo $! > /tmp/lt.pid
+            for i in {1..15}; do
+              sleep 1
+              URL=$(grep -o 'https://[^ ]*loca.lt' /tmp/lt.log | head -n1 || true)
+              if [ -n "$URL" ]; then
+                echo "$URL" > /tmp/public_url.txt
+                break
+              fi
+            done
+            if [ ! -f /tmp/public_url.txt ]; then
+              echo "Failed to get a public URL from both ngrok and localtunnel. Dumping logs..."
+              tail -n +1 /tmp/ngrok.log || true
+              tail -n +1 /tmp/lt.log || true
+              exit 1
+            fi
+            echo "Using localtunnel public URL: $(cat /tmp/public_url.txt)"
+          fi
+
+      - name: Verify public URL and publish to Instagram (debug)
+        env:
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+          LONG_LIVED_TOKEN: ${{ secrets.LONG_LIVED_TOKEN }}
+        run: |
+          PUB=$(cat /tmp/public_url.txt)
+          PUB=$(echo "$PUB" | tr -d '\r\n')
+          VIDEO_URL="${PUB}/video.mp4"
+          THUMB_URL="${PUB}/thumb_1.jpg"
+          echo "Checking VIDEO_URL=$VIDEO_URL"
+          if ! curl -I --max-time 10 "$VIDEO_URL" | head -n1 | grep -q 'HTTP/'; then
+            echo "Video URL not reachable or timed out. Dumping logs:"
+            tail -n 200 /tmp/http.log || true
+            cat /tmp/ngrok.log || true
+            cat /tmp/lt.log || true
+            exit 1
+          fi
+          . .venv/bin/activate
+          python publish_reel_debug.py "$VIDEO_URL" "$THUMB_URL"
+
+      - name: Upload artifacts (zip)
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated-media
+          path: tmp_video/video_and_thumbs.zip
+
+      - name: Teardown always
+        if: always()
+        run: |
+          if [ -f /tmp/ngrok.pid ]; then kill $(cat /tmp/ngrok.pid) || true; fi
+          if [ -f /tmp/lt.pid ]; then kill $(cat /tmp/lt.pid) || true; fi
+          if [ -f /tmp/http.pid ]; then kill $(cat /tmp/http.pid) || true; fi
+          sleep 1
+          echo "Teardown complete."

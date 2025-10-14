@@ -1,20 +1,13 @@
-# ngrok v3 upgrade + virtualenv + localtunnel fallback
+# Final fix: debug publish + pip cache + ngrok v3 + venv
 
-This repository updates the workflow to:
-- download a known ngrok v3 tarball (explicit link used),
-- extract and run the v3 binary (avoids ERR_NGROK_121 caused by old v2 agent),
-- create a Python virtualenv (.venv) and install dependencies into it (faster, isolated),
-- generate a short (3s) vertical color-changing video to speed runs,
-- fallback to localtunnel if ngrok fails,
-- verify the public URL before publishing to Instagram.
+This repo improves reliability and speed:
+- uses Python venv (.venv) to isolate installs and speed up repeated runs
+- caches pip (~/.cache/pip) across runs with actions/cache to avoid reinstalling packages each time
+- downloads an explicit ngrok v3 tarball and runs it (avoids ERR_NGROK_121)
+- falls back to localtunnel if ngrok fails
+- publish_reel_debug.py checks token validity, prints full API responses on error, and aborts safely if token invalid
+- generates a very short 2s video to speed up runs (adjustable)
 
-Files:
-- generate_video_ffmpeg.py
-- publish_reel.py
-- .github/workflows/ngrok_upgrade_with_venv.yml
+**Before running**: add GitHub secrets `IG_USER_ID` and `LONG_LIVED_TOKEN`. Optionally add `NGROK_AUTHTOKEN` to use ngrok.
 
-Secrets required: IG_USER_ID, LONG_LIVED_TOKEN, NGROK_AUTHTOKEN (optional)
-
-Notes:
-- If your NGROK_AUTHTOKEN still fails, try visiting https://ngrok.com/download and copying the v3 download link for Linux x86_64, then update `NGROK_DOWNLOAD_URL` in the workflow.
-- Running every 5 minutes may hit IG rate limits; use workflow_dispatch for safer testing.
+**Testing**: use workflow_dispatch to run manually; inspect logs. If publish fails due to token, the workflow will print detailed responses so you can see why (common cause: expired/invalid token).
