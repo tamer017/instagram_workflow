@@ -94,11 +94,28 @@ jobs:
       - name: Publish to Instagram
         if: steps.generate.outputs.SUCCESS == 'true'
         env:
+          # Support both methods - workflow will auto-detect
           INSTAGRAM_USERNAME: ${{ secrets.INSTAGRAM_USERNAME }}
           INSTAGRAM_PASSWORD: ${{ secrets.INSTAGRAM_PASSWORD }}
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+          LONG_LIVED_TOKEN: ${{ secrets.LONG_LIVED_TOKEN }}
         run: |
-          # Run publish script with instagrapi
-          python publish_reel_instagrapi.py --video "${{ steps.generate.outputs.VIDEO_FILE }}" --caption "Quran Recitation - ${{ steps.select_group.outputs.GROUP_ID }}"
+          # Check which credentials are available
+          if [ -n "$INSTAGRAM_USERNAME" ] && [ -n "$INSTAGRAM_PASSWORD" ]; then
+            echo "🔑 Using instagrapi (Personal Account)"
+            python publish_reel_instagrapi.py --video "${{ steps.generate.outputs.VIDEO_FILE }}" --caption "Quran Recitation - ${{ steps.select_group.outputs.GROUP_ID }}"
+          elif [ -n "$IG_USER_ID" ] && [ -n "$LONG_LIVED_TOKEN" ]; then
+            echo "🔑 Using Graph API (Business Account)"
+            echo "⚠️  Note: Graph API requires publicly accessible video URL"
+            echo "Current video is local file: ${{ steps.generate.outputs.VIDEO_FILE }}"
+            echo "Skipping publish - add INSTAGRAM_USERNAME/PASSWORD for direct upload"
+          else
+            echo "❌ No Instagram credentials found"
+            echo "Add one of these to repository secrets:"
+            echo "  Option 1 (Personal): INSTAGRAM_USERNAME + INSTAGRAM_PASSWORD"
+            echo "  Option 2 (Business): IG_USER_ID + LONG_LIVED_TOKEN"
+            exit 1
+          fi
 
       - name: Mark group as published
         if: steps.generate.outputs.SUCCESS == 'true'
