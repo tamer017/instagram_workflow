@@ -6,6 +6,9 @@ on:
     - cron: '*/15 * * * *'
   workflow_dispatch:  # Allow manual trigger
 
+permissions:
+  contents: write  # Required for GitHub Pages deployment
+
 jobs:
   generate-video:
     runs-on: ubuntu-latest
@@ -87,9 +90,72 @@ jobs:
         if: steps.generate.outputs.SUCCESS == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: quran-video-${{ steps.select_group.outputs.GROUP_ID }}
+          name: generated-video
           path: ${{ steps.generate.outputs.VIDEO_FILE }}
           retention-days: 7
+
+      - name: Deploy video to GitHub Pages
+        if: steps.generate.outputs.SUCCESS == 'true'
+        run: |
+          # Create directory for GitHub Pages
+          mkdir -p gh-pages-content
+          
+          # Copy video to GitHub Pages directory
+          cp "${{ steps.generate.outputs.VIDEO_FILE }}" gh-pages-content/quran-video.mp4
+          
+          echo "📄 Video prepared for GitHub Pages"
+
+      - name: Deploy to GitHub Pages
+        if: steps.generate.outputs.SUCCESS == 'true'
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./gh-pages-content
+          publish_branch: gh-pages
+          force_orphan: true
+          user_name: 'github-actions[bot]'
+          user_email: 'github-actions[bot]@users.noreply.github.com'
+      
+      - name: Wait for GitHub Pages deployment
+        if: steps.generate.outputs.SUCCESS == 'true'
+        run: |
+          echo "⏳ Waiting 30 seconds for GitHub Pages to deploy..."
+          sleep 30
+      
+      - name: Verify video URL is accessible
+        if: steps.generate.outputs.SUCCESS == 'true'
+        id: verify_url
+        run: |
+          VIDEO_URL="https://tamer017.github.io/instagram_workflow/quran-video.mp4"
+          echo "🔍 Verifying URL: $VIDEO_URL"
+          
+          MAX_RETRIES=10
+          RETRY_DELAY=5
+          
+          for i in $(seq 1 $MAX_RETRIES); do
+            echo "Attempt $i/$MAX_RETRIES..."
+            
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -I "$VIDEO_URL")
+            CONTENT_TYPE=$(curl -s -I "$VIDEO_URL" | grep -i "content-type:" | cut -d' ' -f2- | tr -d '\r\n')
+            
+            echo "  HTTP Code: $HTTP_CODE"
+            echo "  Content-Type: $CONTENT_TYPE"
+            
+            if [ "$HTTP_CODE" = "200" ] && echo "$CONTENT_TYPE" | grep -q "video/"; then
+              echo "✅ Video URL is accessible!"
+              echo "VIDEO_URL=$VIDEO_URL" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+            
+            if [ $i -lt $MAX_RETRIES ]; then
+              echo "⏳ Not ready yet, waiting ${RETRY_DELAY}s..."
+              sleep $RETRY_DELAY
+            fi
+          done
+          
+          echo "❌ ERROR: Video URL not accessible after $MAX_RETRIES attempts"
+          echo "Please enable GitHub Pages: Settings → Pages → Source: gh-pages branch"
+          exit 1
 
       - name: Publish to Instagram
         if: steps.generate.outputs.SUCCESS == 'true'
@@ -99,16 +165,26 @@ jobs:
           INSTAGRAM_PASSWORD: ${{ secrets.INSTAGRAM_PASSWORD }}
           IG_USER_ID: ${{ secrets.IG_USER_ID }}
           LONG_LIVED_TOKEN: ${{ secrets.LONG_LIVED_TOKEN }}
+          APP_ID: ${{ secrets.APP_ID }}
+          APP_SECRET: ${{ secrets.APP_SECRET }}
+          CAPTION: "Quran Recitation - ${{ steps.select_group.outputs.GROUP_ID }}"
         run: |
           # Check which credentials are available
           if [ -n "$INSTAGRAM_USERNAME" ] && [ -n "$INSTAGRAM_PASSWORD" ]; then
             echo "🔑 Using instagrapi (Personal Account)"
-            python publish_reel_instagrapi.py --video "${{ steps.generate.outputs.VIDEO_FILE }}" --caption "Quran Recitation - ${{ steps.select_group.outputs.GROUP_ID }}"
+            python publish_reel_instagrapi.py --video "${{ steps.generate.outputs.VIDEO_FILE }}" --caption "$CAPTION"
+            
           elif [ -n "$IG_USER_ID" ] && [ -n "$LONG_LIVED_TOKEN" ]; then
             echo "🔑 Using Graph API (Business Account)"
-            echo "⚠️  Note: Graph API requires publicly accessible video URL"
-            echo "Current video is local file: ${{ steps.generate.outputs.VIDEO_FILE }}"
-            echo "Skipping publish - add INSTAGRAM_USERNAME/PASSWORD for direct upload"
+            echo "� Publishing via Graph API with GitHub Pages URL..."
+            
+            # Use the verified GitHub Pages URL
+            VIDEO_URL="${{ steps.verify_url.outputs.VIDEO_URL }}"
+            echo "Video URL: $VIDEO_URL"
+            
+            # Publish to Instagram using Graph API
+            python publish_reel.py "$VIDEO_URL"
+            
           else
             echo "❌ No Instagram credentials found"
             echo "Add one of these to repository secrets:"
