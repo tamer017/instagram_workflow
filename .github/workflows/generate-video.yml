@@ -68,8 +68,8 @@ jobs:
       - name: Generate video
         id: generate
         run: |
-          # Run the video generation script
-          python generate_simple_video.py --group ${{ steps.select_group.outputs.GROUP_ID }} --no-arabic-text --no-english-text
+          # Run the video generation script with dynamic Arabic and English text overlays
+          python generate_simple_video.py --group ${{ steps.select_group.outputs.GROUP_ID }}
           
           # Find the generated video
           VIDEO_FILE=$(ls -t generated_videos/*.mp4 | head -n 1)

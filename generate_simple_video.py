@@ -356,51 +356,6 @@ def create_simple_video(
     if english_text_data:
         print(f"  Bottom English text items: {len(english_text_data)}")
 
-    def extract_arabic_text(segments, words, verse_num_arabic, lower_limit=5, upper_limit=8):
-        if(len(words) == 0) or len(segments) == 0:
-            return
-        if len(words) < lower_limit:
-            duration = ((segments[-1][-1] - segments[0][2]) / 1000.0) + 1
-            ARABIC_TEXT.append(("﴾" + " ".join(words) + f" ﴿{verse_num_arabic}", duration))
-        elif len(words) >= lower_limit and len(words) < upper_limit:
-            duration1 = ((segments[len(words)//2][-1] - segments[0][2]) / 1000.0) + 1
-            duration2 = ((segments[-1][-1] - segments[len(words)//2 + 1][2]) / 1000.0) + 1
-            ARABIC_TEXT.append((" ".join(words[:len(words)//2]), duration1))
-            ARABIC_TEXT.append(("﴾" + " ".join(words[len(words)//2:]) + f" ﴿{verse_num_arabic}", duration2))
-        else:
-            duration = ((segments[lower_limit-1][-1] - segments[0][2]) / 1000.0) + 1.5
-            ARABIC_TEXT.append((" ".join(words[:lower_limit]), duration))
-            extract_arabic_text(segments[lower_limit:], words=words[lower_limit:],verse_num_arabic=verse_num_arabic)
-    
-    def extract_english_text(words, duration, lower_limit=10):
-        groups = len(words) // lower_limit + (1 if len(words) % lower_limit != 0 else 0)
-        group_duration = (duration / groups) + 0.25
-        for i in range(groups):
-            start = i * lower_limit
-            end = start + lower_limit
-            ENGLISH_TEXT.append((" ".join(words[start:end]), group_duration))
-
-
-    for ayah in group_data.get('ayahs', []):
-        words = ayah.get('arabic_words', [])
-        segments = ayah.get('segments',[[]])
-        english_words = ayah.get('translation', "").split()
-        if len(words) != len(segments):
-            new_words = []
-            for word in words:
-                if len(word.strip()) > 1:
-                    new_words.append(word)
-                else:
-                    new_words[-1] += word
-            words = new_words
-            
-        verse_number = ayah.get('ayah_number', 0)
-        verse_num_arabic = convert_number_to_arabic(verse_number)
-
-        extract_arabic_text(segments, words=words, verse_num_arabic=verse_num_arabic)
-        extract_english_text(english_words, ayah.get('duration_ms', 0) / 1000.0)
-
-
     print(f"\nBuilding video with FFmpeg...")
     
     # Escape text for FFmpeg (preserve newlines for multi-line text)
@@ -549,6 +504,11 @@ def process_group(group_id: str, ffmpeg_path: str, text_data: Optional[List[tupl
         text_data: Optional list of (text, duration) tuples for center text display
         english_text_data: Optional list of (text, duration) tuples for bottom English text display
     """
+    # Clear global text arrays at the start
+    global ARABIC_TEXT, ENGLISH_TEXT
+    ARABIC_TEXT.clear()
+    ENGLISH_TEXT.clear()
+    
     print(f"\n{'='*80}")
     print("SIMPLE QURAN VIDEO GENERATOR")
     print(f"{'='*80}")
@@ -600,11 +560,63 @@ def process_group(group_id: str, ffmpeg_path: str, text_data: Optional[List[tupl
     if not merge_audio_files(audio_files, merged_audio_path, ffmpeg_path):
         return False
     
+    # Populate text overlays from ayah data (if not disabled)
+    def extract_arabic_text(segments, words, verse_num_arabic, lower_limit=5, upper_limit=8):
+        if(len(words) == 0) or len(segments) == 0:
+            return
+        if len(words) < lower_limit:
+            duration = ((segments[-1][-1] - segments[0][2]) / 1000.0) + 1
+            ARABIC_TEXT.append(("﴾" + " ".join(words) + f" ﴿{verse_num_arabic}", duration))
+        elif len(words) >= lower_limit and len(words) < upper_limit:
+            duration1 = ((segments[len(words)//2][-1] - segments[0][2]) / 1000.0) + 1
+            duration2 = ((segments[-1][-1] - segments[len(words)//2 + 1][2]) / 1000.0) + 1
+            ARABIC_TEXT.append((" ".join(words[:len(words)//2]), duration1))
+            ARABIC_TEXT.append(("﴾" + " ".join(words[len(words)//2:]) + f" ﴿{verse_num_arabic}", duration2))
+        else:
+            duration = ((segments[lower_limit-1][-1] - segments[0][2]) / 1000.0) + 1.5
+            ARABIC_TEXT.append((" ".join(words[:lower_limit]), duration))
+            extract_arabic_text(segments[lower_limit:], words=words[lower_limit:],verse_num_arabic=verse_num_arabic)
+    
+    def extract_english_text(words, duration, lower_limit=10):
+        groups = len(words) // lower_limit + (1 if len(words) % lower_limit != 0 else 0)
+        group_duration = (duration / groups) + 0.25
+        for i in range(groups):
+            start = i * lower_limit
+            end = start + lower_limit
+            ENGLISH_TEXT.append((" ".join(words[start:end]), group_duration))
+    
+    # Extract text from ayahs
+    for ayah in group_data.get('ayahs', []):
+        words = ayah.get('arabic_words', [])
+        segments = ayah.get('segments',[[]])
+        english_words = ayah.get('translation', "").split()
+        if len(words) != len(segments):
+            new_words = []
+            for word in words:
+                if len(word.strip()) > 1:
+                    new_words.append(word)
+                else:
+                    new_words[-1] += word
+            words = new_words
+            
+        verse_number = ayah.get('ayah_number', 0)
+        verse_num_arabic = convert_number_to_arabic(verse_number)
+
+        extract_arabic_text(segments, words=words, verse_num_arabic=verse_num_arabic)
+        extract_english_text(english_words, ayah.get('duration_ms', 0) / 1000.0)
+    
+    print(f"Generated {len(ARABIC_TEXT)} Arabic text segments")
+    print(f"Generated {len(ENGLISH_TEXT)} English text segments")
+    
+    # Use populated text arrays unless disabled by function parameters
+    final_arabic_text = ARABIC_TEXT if text_data is None else text_data
+    final_english_text = ENGLISH_TEXT if english_text_data is None else english_text_data
+    
     # Create video
     print(f"\n{'='*70}\nVIDEO GENERATION\n{'='*70}")
     output_video_path = OUTPUT_VIDEO_DIR / f"{group_id}.mp4"
     
-    if not create_simple_video(group_data, merged_audio_path, output_video_path, ffmpeg_path, text_data, english_text_data):
+    if not create_simple_video(group_data, merged_audio_path, output_video_path, ffmpeg_path, final_arabic_text, final_english_text):
         return False
     
     print(f"\n{'='*80}\nSUCCESS!\n{'='*80}")
