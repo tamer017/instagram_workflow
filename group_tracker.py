@@ -50,23 +50,29 @@ def save_published_groups(data: Dict):
 
 
 def get_all_groups() -> List[str]:
-    """Get all available groups from all reciter files, sorted by reciter and surah."""
+    """Get all available groups from reciter_1_AbdulBaset_AbdulSamad only."""
     all_groups = []
     quran_groups_dir = Path("quran_groups")
     
-    # Get all reciter group files, sorted by reciter number
-    group_files = sorted(quran_groups_dir.glob("reciter_*_groups.json"))
+    # Only use reciter_1_AbdulBaset_AbdulSamad_groups.json
+    reciter_1_file = quran_groups_dir / "reciter_1_AbdulBaset_AbdulSamad_groups.json"
     
-    for group_file in group_files:
-        try:
-            with open(group_file, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                groups = data.get('groups', {})
-                # Sort groups by surah and ayah
-                sorted_groups = sorted(groups.keys())
-                all_groups.extend(sorted_groups)
-        except Exception as e:
-            print(f"Error loading {group_file}: {e}")
+    if not reciter_1_file.exists():
+        print(f"Error: {reciter_1_file} not found!")
+        return []
+    
+    try:
+        with open(reciter_1_file, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            groups = data.get('groups', {})
+            # Sort groups by surah and ayah (numerical order)
+            sorted_groups = sorted(groups.keys(), key=lambda x: (
+                int(x.split('_')[1][1:]),  # Surah number (s001 -> 1)
+                int(x.split('_')[2].split('-')[0])  # Start ayah
+            ))
+            all_groups.extend(sorted_groups)
+    except Exception as e:
+        print(f"Error loading {reciter_1_file}: {e}")
     
     return all_groups
 

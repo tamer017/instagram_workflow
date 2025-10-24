@@ -167,8 +167,16 @@ jobs:
           LONG_LIVED_TOKEN: ${{ secrets.LONG_LIVED_TOKEN }}
           APP_ID: ${{ secrets.APP_ID }}
           APP_SECRET: ${{ secrets.APP_SECRET }}
-          CAPTION: "Quran Recitation - ${{ steps.select_group.outputs.GROUP_ID }}"
         run: |
+          # Generate proper caption with Arabic and English info
+          python generate_caption.py "${{ steps.select_group.outputs.GROUP_ID }}"
+          CAPTION=$(cat caption.txt)
+          echo "📝 Generated caption:"
+          echo "$CAPTION"
+          
+          # Export caption for use in publish scripts
+          export CAPTION="$CAPTION"
+          
           # Check which credentials are available
           if [ -n "$INSTAGRAM_USERNAME" ] && [ -n "$INSTAGRAM_PASSWORD" ]; then
             echo "🔑 Using instagrapi (Personal Account)"
