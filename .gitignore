@@ -6,6 +6,7 @@
 
 # Token files
 instagram_token.json
+instagram_session.json
 token.json
 secrets.json
 

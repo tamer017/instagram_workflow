@@ -41,6 +41,7 @@ jobs:
         run: |
           pip install --upgrade pip
           pip install -r requirements.txt
+          pip install instagrapi
 
       - name: Select next group to publish (sequential)
         id: select_group
@@ -96,11 +97,8 @@ jobs:
           INSTAGRAM_USERNAME: ${{ secrets.INSTAGRAM_USERNAME }}
           INSTAGRAM_PASSWORD: ${{ secrets.INSTAGRAM_PASSWORD }}
         run: |
-          # Install Instagram publishing tool
-          pip install instagrapi
-          
-          # Run publish script
-          python publish_reel.py --video "${{ steps.generate.outputs.VIDEO_FILE }}"
+          # Run publish script with instagrapi
+          python publish_reel_instagrapi.py --video "${{ steps.generate.outputs.VIDEO_FILE }}" --caption "Quran Recitation - ${{ steps.select_group.outputs.GROUP_ID }}"
 
       - name: Mark group as published
         if: steps.generate.outputs.SUCCESS == 'true'
