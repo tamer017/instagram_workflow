@@ -1,16 +1,17 @@
 {
-  "last_published": "reciter1_s002_004-005",
+  "last_published": "reciter1_s002_006-007",
   "published_groups": [
     "reciter10_s001_001-007",
     "reciter1_s001_001-007",
     "reciter1_s002_001-003",
-    "reciter1_s002_004-005"
+    "reciter1_s002_004-005",
+    "reciter1_s002_006-007"
   ],
   "queue": [],
   "statistics": {
-    "total_published": 4,
-    "last_run": "2025-10-24T16:00:52.554870",
-    "success_count": 4,
+    "total_published": 5,
+    "last_run": "2025-10-24T16:31:56.935691",
+    "success_count": 5,
     "failure_count": 0
   }
 }
