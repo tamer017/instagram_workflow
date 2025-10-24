@@ -1,0 +1,67 @@
+# .env file should NEVER be committed
+.env
+.env.local
+.env.*.local
+*.env
+
+# Token files
+instagram_token.json
+token.json
+secrets.json
+
+# Quran API data (contains tokens and cached data)
+quran_data/
+quran_reciters/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Outputs
+outputs/*.mp4
+outputs/*.jpg
+outputs/*.zip
+outputs/frames/
+
+# Generated videos and audio (too large for git)
+generated_videos/*.mp4
+merged_audio_samples/*.mp3
+temp_audio_downloads/*.mp3
+temp_audio_downloads/*.mp4
+
+# Logs
+*.log
+server.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.history/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary
+tmp/
+temp/
+tmp_video/
+
+# Large binaries - FFmpeg (will be installed by workflow)
+ffmpeg/
+ffmpeg-master-latest-win64-gpl/
+
+# Keep tracking file (important!)
+!published_groups.json
+
+# Keep directory structure
+!generated_videos/.gitkeep
+!merged_audio_samples/.gitkeep
+!temp_audio_downloads/.gitkeep
+.env

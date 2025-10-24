@@ -1,0 +1,7 @@
+pillow
+requests
+python-dotenv
+opencv-python
+moviepy
+arabic-reshaper
+python-bidi
