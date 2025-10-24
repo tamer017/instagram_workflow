@@ -1,5 +1,5 @@
 {
-  "last_published": "reciter1_s002_014-014",
+  "last_published": "reciter1_s002_015-016",
   "published_groups": [
     "reciter10_s001_001-007",
     "reciter1_s001_001-007",
@@ -10,13 +10,14 @@
     "reciter1_s002_010-011",
     "reciter1_s002_012-012",
     "reciter1_s002_013-013",
-    "reciter1_s002_014-014"
+    "reciter1_s002_014-014",
+    "reciter1_s002_015-016"
   ],
   "queue": [],
   "statistics": {
-    "total_published": 10,
-    "last_run": "2025-10-24T18:53:25.466181",
-    "success_count": 10,
+    "total_published": 11,
+    "last_run": "2025-10-24T19:24:12.059707",
+    "success_count": 11,
     "failure_count": 0
   }
 }
