@@ -6,7 +6,11 @@ Includes: Surah name, Ayah numbers, Reciter name (both languages)
 
 import json
 import sys
+import random
 from pathlib import Path
+
+# Configuration
+HASHTAG_COUNT = 15  # Fixed number of hashtags to use per post
 
 
 def load_json(file_path):
@@ -86,6 +90,131 @@ def parse_group_id(group_id):
     return reciter_id, surah_num, start_ayah, end_ayah
 
 
+def get_hashtag_pool():
+    """
+    Return a large pool of relevant hashtags for Quran content.
+    Mix of Islamic, spiritual, religious, and Quran-specific tags in English and Arabic.
+    """
+    return [
+        # Core Quran hashtags (English)
+        "#Quran", "#HolyQuran", "#QuranRecitation", "#QuranDaily", "#QuranVerse",
+        "#QuranQuotes", "#QuranReading", "#QuranKareem", "#Tilawat", "#TilawatEQuran",
+        "#QuranReels", "#QuranVideo", "#QuranAudio", "#QuranReciter", "#QuranicVerses",
+        
+        # Core Quran hashtags (Arabic)
+        "#القرآن", "#القرآن_الكريم", "#تلاوة", "#تلاوة_القرآن", "#آيات_قرآنية",
+        "#قرآن_كريم", "#تلاوات", "#القران", "#مصحف", "#تجويد",
+        
+        # Islamic faith hashtags (English)
+        "#Islam", "#Islamic", "#Muslim", "#Allah", "#IslamicPost", "#IslamicContent",
+        "#IslamicReminder", "#IslamicQuotes", "#MuslimLife", "#Ummah", "#Deen",
+        "#Sunnah", "#IslamDaily", "#IslamicReels", "#MuslimReels",
+        
+        # Islamic faith hashtags (Arabic)
+        "#الإسلام", "#إسلامي", "#مسلم", "#الله", "#دين", "#أمة_الإسلام",
+        "#سنة", "#إسلاميات", "#ديني", "#مسلمون", "#أمة_محمد",
+        
+        # Spiritual and worship hashtags (English)
+        "#Spirituality", "#Faith", "#Prayer", "#Dua", "#Worship", "#Blessed",
+        "#SpiritualJourney", "#IslamicSpirituality", "#DivineWords", "#SacredText",
+        "#HolyBook", "#ReligiousContent", "#Devotion", "#IslamicWisdom",
+        
+        # Spiritual and worship hashtags (Arabic)
+        "#روحانيات", "#إيمان", "#صلاة", "#دعاء", "#عبادة", "#ذكر_الله",
+        "#روحانية", "#مؤمنون", "#كتاب_الله", "#حكمة_إسلامية",
+        
+        # Recitation and learning hashtags (English)
+        "#TajweedQuran", "#LearnQuran", "#QuranStudy", "#QuranTeaching", "#QuranLearning",
+        "#QuranMemorization", "#Hifz", "#QuranSchool", "#QuranClass", "#QuranicStudies",
+        "#ArabicRecitation", "#BeautifulRecitation", "#MelodiousQuran",
+        
+        # Recitation and learning hashtags (Arabic)
+        "#تجويد_القرآن", "#تعلم_القرآن", "#حفظ_القرآن", "#حافظ", "#مقرئ",
+        "#قراء", "#تعليم_القرآن", "#دراسة_قرآنية", "#حلقات_قرآنية",
+        
+        # Peace and reflection hashtags (English)
+        "#Peace", "#InnerPeace", "#Reflection", "#Meditation", "#Contemplation",
+        "#PeaceOfMind", "#Tranquility", "#Serenity", "#Calm", "#Mindfulness",
+        "#SpiritualPeace", "#IslamicPeace",
+        
+        # Peace and reflection hashtags (Arabic)
+        "#سلام", "#سكينة", "#طمأنينة", "#تأمل", "#راحة_البال",
+        "#هدوء", "#سلام_القلب", "#تدبر", "#خشوع",
+        
+        # Community and sharing hashtags (English)
+        "#ShareTheQuran", "#SpreadTheWord", "#IslamicCommunity", "#MuslimCommunity",
+        "#MuslimWorld", "#IslamicWorld", "#BrotherhoodInIslam", "#UmmahUnity",
+        
+        # Community and sharing hashtags (Arabic)
+        "#شارك_الخير", "#انشر_الخير", "#مجتمع_إسلامي", "#أخوة_الإسلام",
+        "#أمة_واحدة", "#المسلمين", "#العالم_الإسلامي",
+        
+        # Arabic and language hashtags (English)
+        "#Arabic", "#ArabicLanguage", "#ArabicCalligraphy", "#IslamicArt",
+        "#ArabicQuran", "#ClassicalArabic",
+        
+        # Arabic and language hashtags (Arabic)
+        "#عربي", "#لغة_عربية", "#خط_عربي", "#فن_إسلامي", "#قرآن_عربي",
+        
+        # Ramadan and special occasions (English)
+        "#Ramadan", "#RamadanKareem", "#Jummah", "#JummahMubarak", "#IslamicReminders",
+        "#DailyReminder", "#IslamicMotivation",
+        
+        # Ramadan and special occasions (Arabic)
+        "#رمضان", "#رمضان_كريم", "#جمعة_مباركة", "#يوم_الجمعة",
+        "#تذكير", "#تذكير_ديني", "#موعظة",
+        
+        # Blessings and gratitude hashtags (English)
+        "#Alhamdulillah", "#SubhanAllah", "#MashaAllah", "#Barakah", "#Blessings",
+        "#Grateful", "#Thankful", "#AllahuAkbar",
+        
+        # Blessings and gratitude hashtags (Arabic)
+        "#الحمد_لله", "#الحمدلله", "#سبحان_الله", "#ماشاء_الله",
+        "#بركة", "#شكر", "#الله_أكبر", "#نعمة",
+        
+        # Guidance and inspiration hashtags (English)
+        "#Guidance", "#IslamicGuidance", "#DivineGuidance", "#Inspiration",
+        "#IslamicInspiration", "#MotivationalQuotes", "#FaithInspiration",
+        "#PathToParadise", "#Jannah",
+        
+        # Guidance and inspiration hashtags (Arabic)
+        "#هداية", "#إرشاد", "#هدى", "#إلهام", "#طريق_الجنة",
+        "#جنة", "#توجيه_ديني", "#نور", "#بصيرة",
+        
+        # Lifestyle and modern Muslim hashtags (English)
+        "#ModernMuslim", "#MuslimLifestyle", "#IslamicLifestyle", "#MuslimMotivation",
+        "#IslamInModernWorld", "#YoungMuslim", "#MuslimYouth",
+        
+        # Lifestyle and modern Muslim hashtags (Arabic)
+        "#مسلم_عصري", "#حياة_إسلامية", "#أسلوب_حياة_إسلامي",
+        "#شباب_مسلم", "#جيل_القرآن",
+        
+        # Reels and content format hashtags (English)
+        "#Reels", "#InstagramReels", "#IslamicReels", "#MuslimReels", "#ViralReels",
+        "#TrendingReels", "#ReelsOfInstagram", "#ExploreReels", "#ReelsViral",
+        
+        # Reels and content format hashtags (Arabic)
+        "#ريلز", "#ريلز_إسلامي", "#فيديو_قصير", "#محتوى_إسلامي",
+        "#ريلز_ديني", "#قصير",
+        
+        # Educational hashtags (English)
+        "#IslamicEducation", "#LearnIslam", "#IslamicKnowledge", "#KnowledgeIsPower",
+        "#SeekKnowledge", "#IslamicLearning", "#ReligiousEducation",
+        
+        # Educational hashtags (Arabic)
+        "#تعليم_إسلامي", "#تعلم_الإسلام", "#علم_شرعي", "#معرفة",
+        "#طلب_العلم", "#ثقافة_إسلامية", "#فقه",
+        
+        # Additional variations (English)
+        "#AlQuran", "#AlQuranAlKareem", "#NobleQuran", "#GloriousQuran",
+        "#BookOfAllah", "#WordOfGod", "#DivineSpeech", "#RevelationOfAllah",
+        
+        # Additional variations (Arabic)
+        "#كلام_الله", "#وحي", "#آيات", "#سور", "#كتاب_الله",
+        "#قول_الله", "#منزل_من_عند_الله", "#معجزة_القرآن"
+    ]
+
+
 def generate_caption(group_id):
     """
     Generate Instagram caption with Arabic and English information.
@@ -97,7 +226,7 @@ def generate_caption(group_id):
     🎙️ [Arabic Reciter Name]
     🎙️ [English Reciter Name]
     
-    #Quran #QuranRecitation #Islam
+    [Random selection of hashtags from pool]
     """
     try:
         reciter_id, surah_num, start_ayah, end_ayah = parse_group_id(group_id)
@@ -132,24 +261,34 @@ def generate_caption(group_id):
         
         caption_parts.append("")  # Empty line
         
-        # Hashtags
-        hashtags = [
-            "#Quran",
-            "#QuranRecitation",
-            "#Islam",
-            "#Islamic",
-            "#Muslim",
-            "#Allah",
-            "#HolyQuran",
-            "#Tilawat"
-        ]
+        # Get hashtag pool and select random hashtags
+        hashtag_pool = get_hashtag_pool()
         
+        # Always include core hashtags
+        core_hashtags = ["#Quran", "#Islam", "#QuranRecitation"]
+        
+        # Add surah-specific hashtag if available
         if surah_info.get('english'):
-            # Add surah-specific hashtag
             surah_tag = surah_info['english'].replace(' ', '').replace('-', '')
-            hashtags.append(f"#{surah_tag}")
+            core_hashtags.append(f"#{surah_tag}")
         
-        caption_parts.append(" ".join(hashtags))
+        # Remove core hashtags from pool to avoid duplicates
+        available_hashtags = [tag for tag in hashtag_pool if tag not in core_hashtags]
+        
+        # Calculate how many random hashtags to add
+        num_random = HASHTAG_COUNT - len(core_hashtags)
+        
+        # Select random hashtags from available pool
+        if num_random > 0 and available_hashtags:
+            random_hashtags = random.sample(available_hashtags, min(num_random, len(available_hashtags)))
+        else:
+            random_hashtags = []
+        
+        # Combine core and random hashtags
+        all_hashtags = core_hashtags + random_hashtags
+        
+        # Add hashtags to caption
+        caption_parts.append(" ".join(all_hashtags))
         
         return "\n".join(caption_parts)
         

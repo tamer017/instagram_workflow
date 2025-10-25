@@ -376,10 +376,12 @@ def create_simple_video(
     # Create filter complex with proper scaling and cropping for Instagram Reels (9:16 aspect ratio)
     # This ensures NO black margins and perfect fit
     filter_parts = [
-        # Scale video to cover the entire frame (may crop sides or top/bottom)
-        f"[0:v]scale='if(gt(a,9/16),{VIDEO_WIDTH},-2)':'if(gt(a,9/16),-2,{VIDEO_HEIGHT})'[scaled]",
-        # Crop to exact 1080x1920 from center
-        f"[scaled]crop={VIDEO_WIDTH}:{VIDEO_HEIGHT}[cropped]",
+        # Scale video to COVER the entire frame (9:16) so there are NO black bars.
+        # If input is wider than 9:16, scale height to VIDEO_HEIGHT (width will be >= VIDEO_WIDTH).
+        # If input is taller (narrower) than 9:16, scale width to VIDEO_WIDTH (height will be >= VIDEO_HEIGHT).
+        f"[0:v]scale='if(gt(a,{9/16}),-2,{VIDEO_WIDTH})':'if(gt(a,{9/16}),{VIDEO_HEIGHT},-2)'[scaled]",
+        # Center-crop to exact 1080x1920 to guarantee no black margins and exact dimensions
+        f"[scaled]crop={VIDEO_WIDTH}:{VIDEO_HEIGHT}:(iw-{VIDEO_WIDTH})/2:(ih-{VIDEO_HEIGHT})/2[cropped]",
         # Enhance brightness and contrast for better visibility
         f"[cropped]eq=brightness=0.05:contrast=1.15:saturation=1.1[adjusted]",
         f"[adjusted]drawtext=fontfile='{font_path}':text='{top_arabic_esc}':fontsize=50:fontcolor=gold:bordercolor=black:borderw=2:x=(w-text_w)/2:y=220[t1]",
