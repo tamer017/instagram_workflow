@@ -16,13 +16,13 @@ APPROVED_VIDEOS_FILE = Path("approved_videos.json")
 SURAH_NAMES_FILE = Path("surah_names.json")
 RECITER_NAMES_FILE = Path("reciter_names.json")
 
-# Video settings
+# Video settings (Instagram Reels optimal)
 VIDEO_WIDTH = 1080
 VIDEO_HEIGHT = 1920
 VIDEO_FPS = 30
 
-# Audio settings
-AUDIO_BITRATE = "192k"
+# Audio settings (higher quality for better output)
+AUDIO_BITRATE = "256k"
 
 # Text overlay data (Arabic - displays in center)
 ARABIC_TEXT = []
@@ -373,13 +373,17 @@ def create_simple_video(
     font_path = get_font_path()
     print(f"Using font: {font_path}")
     
-    # Create filter complex with text overlays
+    # Create filter complex with proper scaling and cropping for Instagram Reels (9:16 aspect ratio)
+    # This ensures NO black margins and perfect fit
     filter_parts = [
-        f"[0:v]scale={VIDEO_WIDTH}:{int(VIDEO_WIDTH * 16/9)}[scaled]",
+        # Scale video to cover the entire frame (may crop sides or top/bottom)
+        f"[0:v]scale='if(gt(a,9/16),{VIDEO_WIDTH},-2)':'if(gt(a,9/16),-2,{VIDEO_HEIGHT})'[scaled]",
+        # Crop to exact 1080x1920 from center
         f"[scaled]crop={VIDEO_WIDTH}:{VIDEO_HEIGHT}[cropped]",
-        f"[cropped]eq=brightness=0.0:contrast=1.1[adjusted]",
-        f"[adjusted]drawtext=fontfile='{font_path}':text='{top_arabic_esc}':fontsize=50:fontcolor=gold:bordercolor=black:borderw=2:x=(w-text_w)/2:y=60[t1]",
-        f"[t1]drawtext=fontfile='{font_path}':text='{reciter_arabic_esc}':fontsize=40:fontcolor=white@0.9:bordercolor=black:borderw=2:x=(w-text_w)/2:y=130[t2]",
+        # Enhance brightness and contrast for better visibility
+        f"[cropped]eq=brightness=0.05:contrast=1.15:saturation=1.1[adjusted]",
+        f"[adjusted]drawtext=fontfile='{font_path}':text='{top_arabic_esc}':fontsize=50:fontcolor=gold:bordercolor=black:borderw=2:x=(w-text_w)/2:y=220[t1]",
+        f"[t1]drawtext=fontfile='{font_path}':text='{reciter_arabic_esc}':fontsize=40:fontcolor=white@0.9:bordercolor=black:borderw=2:x=(w-text_w)/2:y=280[t2]",
     ]
     
     # Add center text with timing if provided (Arabic - larger font)
@@ -394,12 +398,11 @@ def create_simple_video(
             text_esc = escape_text(wrapped_text)
             next_filter = f"c{i+1}" if i < len(text_data) - 1 else "t3"
             
-            # Larger Arabic font (70px) with proper positioning and line breaks
+            # Larger Arabic font (70px) with proper positioning
             filter_parts.append(
                 f"[{current_filter}]drawtext=fontfile='{font_path}':"
                 f"text='{text_esc}':fontsize=60:fontcolor=white:bordercolor=black:borderw=3:"
                 f"x=(w-text_w)/2:y=(h-text_h)/2:"
-                f"line_spacing=10:"
                 f"enable='between(t,{start_time},{end_time})'[{next_filter}]"
             )
             current_filter = next_filter
@@ -411,12 +414,12 @@ def create_simple_video(
     # Add bottom static text (English info and reciter)
     filter_parts.append(
         f"[{current_filter}]drawtext=fontfile='{font_path}':text='{english_info_esc}':"
-        f"fontsize=45:fontcolor=gold:bordercolor=black:borderw=2:x=(w-text_w)/2:y=h-180[t4]"
+        f"fontsize=45:fontcolor=gold:bordercolor=black:borderw=2:x=(w-text_w)/2:y=h-280[t4]"
     )
     
     filter_parts.append(
         f"[t4]drawtext=fontfile='{font_path}':text='{reciter_english_esc}':"
-        f"fontsize=38:fontcolor=white@0.9:bordercolor=black:borderw=2:x=(w-text_w)/2:y=h-120[t5]"
+        f"fontsize=38:fontcolor=white@0.9:bordercolor=black:borderw=2:x=(w-text_w)/2:y=h-220[t5]"
     )
     
     # Add bottom English text with timing if provided (higher position)
@@ -431,12 +434,11 @@ def create_simple_video(
             text_esc = escape_text(wrapped_text)
             next_filter = f"be{i+1}" if i < len(english_text_data) - 1 else "output"
             
-            # English text positioned higher (y=h-350) with larger font and line breaks
+            # English text positioned higher (y=h-350) with larger font 
             filter_parts.append(
                 f"[{current_filter}]drawtext=fontfile='{font_path}':"
                 f"text='{text_esc}':fontsize=32:fontcolor=white:bordercolor=black:borderw=2:"
                 f"x=(w-text_w)/2:y=h-350:"
-                f"line_spacing=8:"
                 f"enable='between(t,{start_time},{end_time})'[{next_filter}]"
             )
             current_filter = next_filter
@@ -446,11 +448,27 @@ def create_simple_video(
     
     filter_complex = ";".join(filter_parts)
     
+    # High-quality encoding settings for Instagram Reels
     cmd = [
         ffmpeg_path, '-stream_loop', '-1', '-i', str(bg_video_path), '-i', str(audio_path),
         '-filter_complex', filter_complex, '-map', '[output]', '-map', '1:a',
-        '-c:v', 'libx264', '-preset', 'medium', '-crf', '23',
-        '-c:a', 'aac', '-b:a', AUDIO_BITRATE, '-shortest', '-y', str(output_path)
+        # Video encoding with higher quality
+        '-c:v', 'libx264',
+        '-preset', 'slow',  # Slower preset = better quality
+        '-crf', '18',  # Lower CRF = higher quality (18 is visually lossless)
+        '-profile:v', 'high',  # High profile for better compression
+        '-level', '4.2',  # H.264 level for HD video
+        '-pix_fmt', 'yuv420p',  # Pixel format for maximum compatibility
+        '-movflags', '+faststart',  # Optimize for streaming
+        # Audio encoding with higher quality
+        '-c:a', 'aac',
+        '-b:a', AUDIO_BITRATE,
+        '-ar', '48000',  # 48kHz sample rate (professional quality)
+        # Ensure exact dimensions and duration
+        '-s', f'{VIDEO_WIDTH}x{VIDEO_HEIGHT}',
+        '-r', str(VIDEO_FPS),
+        '-shortest',
+        '-y', str(output_path)
     ]
     
     print("  Encoding video...")
