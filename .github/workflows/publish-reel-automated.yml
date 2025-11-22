@@ -1,95 +1,132 @@
-name: Publish Instagram Reel (Automated)
+name: Post Generated Quranic Videos to Instagram
 
 on:
   schedule:
-    # Run every 5 minutes
-    - cron: '*/5 * * * *'
-  workflow_dispatch:  # Allow manual trigger from GitHub Actions tab
+    - cron: '*/5 * * * *'  # Every 5 minutes
+  workflow_dispatch:
 
 permissions:
-  contents: read  # Only needs read access for code
-  pages: write    # For any GitHub Pages updates if needed
+  contents: read
 
 jobs:
-  publish-reel:
+  post-quranic-video:
     runs-on: ubuntu-latest
-    name: Generate and Publish Reel
-    
+    name: Post Generated Quranic Video to Instagram
+
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
+        uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.11'
 
-      - name: Cache FFmpeg
-        uses: actions/cache@v3
-        with:
-          path: ~/ffmpeg
-          key: ffmpeg-${{ runner.os }}
-          restore-keys: ffmpeg-
-
-      - name: Install FFmpeg
-        run: |
-          if ! command -v ffmpeg &> /dev/null; then
-            sudo apt-get update
-            sudo apt-get install -y ffmpeg
-          fi
-
-      - name: Install Python dependencies
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install requests
 
-      - name: Generate and publish Quranic reel
+      - name: Find latest generated video
+        id: find-video
+        run: |
+          VIDEO_FILE=$(ls -t generated_videos/*.mp4 2>/dev/null | head -1)
+          if [ -z "$VIDEO_FILE" ]; then
+            echo "No video found"
+            echo "video_found=false" >> $GITHUB_OUTPUT
+          else
+            echo "Found video: $VIDEO_FILE"
+            echo "video_found=true" >> $GITHUB_OUTPUT
+            echo "video_path=$VIDEO_FILE" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Upload video to Instagram
+        if: steps.find-video.outputs.video_found == 'true'
         env:
           IG_USER_ID: ${{ secrets.IG_USER_ID }}
           LONG_LIVED_TOKEN: ${{ secrets.LONG_LIVED_TOKEN }}
-          APP_ID: ${{ secrets.APP_ID }}
-          APP_SECRET: ${{ secrets.APP_SECRET }}
-          CAPTION: ${{ secrets.REEL_CAPTION }}
-          MAX_POLL_SECONDS: '1500'
-          POLL_INTERVAL: '10'
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_REPOSITORY: ${{ github.repository }}
+          VIDEO_PATH: ${{ steps.find-video.outputs.video_path }}
         run: |
-          echo "🎬 Starting automated Instagram reel generation and publishing..."
-          python publish_reel.py
-          echo "✅ Workflow completed!"
+          python3 << 'PYTHON_EOF'
+import os
+import requests
+import json
+from pathlib import Path
 
-      - name: Upload artifacts on failure
+IG_USER_ID = os.environ.get("IG_USER_ID")
+LONG_LIVED_TOKEN = os.environ.get("LONG_LIVED_TOKEN")
+VIDEO_PATH = os.environ.get("VIDEO_PATH")
+
+if not IG_USER_ID or not LONG_LIVED_TOKEN:
+    print("❌ Missing IG_USER_ID or LONG_LIVED_TOKEN")
+    print("Please add secrets in GitHub Settings → Secrets and variables → Actions")
+    exit(1)
+
+if not VIDEO_PATH or not os.path.exists(VIDEO_PATH):
+    print("❌ Video file not found")
+    exit(1)
+
+print(f"📱 Posting Quranic video to Instagram: {IG_USER_ID}")
+print(f"📹 Video: {VIDEO_PATH}")
+
+# Read the video file
+with open(VIDEO_PATH, 'rb') as f:
+    video_data = f.read()
+
+# Upload video
+print("⬆️ Uploading video to Instagram...")
+container_url = f"https://graph.instagram.com/v17.0/{IG_USER_ID}/media"
+files = {'media_type': (None, 'VIDEO'), 'video_data': ('video.mp4', video_data)}
+params = {'access_token': LONG_LIVED_TOKEN}
+
+response = requests.post(container_url, files=files, params=params)
+print(f"Upload Status: {response.status_code}")
+
+if response.status_code != 200:
+    print(f"Error: {response.text}")
+    exit(1)
+
+media_id = response.json().get("id")
+print(f"✅ Media uploaded: {media_id}")
+
+# Publish the video
+print("📤 Publishing to Instagram...")
+publish_url = f"https://graph.instagram.com/v17.0/{IG_USER_ID}/media_publish"
+publish_data = {
+    "creation_id": media_id,
+    "caption": "🕌 Quranic Recitation\n📖 Holy Quran\n✨ Automated post\n\n#Quran #Islam #MuslimCommunity #QuranicVerses"
+}
+headers = {"Authorization": f"Bearer {LONG_LIVED_TOKEN}"}
+
+publish_response = requests.post(publish_url, json=publish_data, headers=headers)
+print(f"Publish Status: {publish_response.status_code}")
+
+if publish_response.status_code == 200:
+    post_id = publish_response.json().get("id")
+    print(f"✅ Quranic video posted successfully!")
+    print(f"📱 Post ID: {post_id}")
+else:
+    print(f"Error: {publish_response.text}")
+    exit(1)
+PYTHON_EOF
+
+      - name: Success notification
+        if: success()
+        run: |
+          echo "✅ Quranic video posted to Instagram!"
+          echo "📱 Check your Instagram profile"
+
+      - name: No video found notification
+        if: steps.find-video.outputs.video_found == 'false'
+        run: |
+          echo "⚠️ No generated video found"
+          echo "Run 'Generate and Push Quranic Videos' workflow first"
+
+      - name: Failure notification
         if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: debug-logs
-          path: |
-            generated_videos/
-            *.log
-          retention-days: 3
-
-      - name: Notify on failure
-        if: failure()
         run: |
-          echo "❌ Workflow failed. Check the logs above for details."
-          exit 1
-
-  # Optional: Monitor token expiration
-  check-token-status:
-    runs-on: ubuntu-latest
-    needs: publish-reel
-    if: always()
-    steps:
-      - name: Check Instagram token health
-        env:
-          LONG_LIVED_TOKEN: ${{ secrets.LONG_LIVED_TOKEN }}
-        run: |
-          if [ -z "$LONG_LIVED_TOKEN" ]; then
-            echo "⚠️  WARNING: IG_USER_ID or LONG_LIVED_TOKEN not configured!"
-            echo "Please add these secrets in Settings → Secrets and variables → Actions"
-            exit 0
-          fi
-          echo "✅ Instagram credentials are configured"
+          echo "❌ Failed to post video"
+          echo "Check:"
+          echo "  1. GitHub Secrets: IG_USER_ID, LONG_LIVED_TOKEN"
+          echo "  2. Instagram Business Account linked to Facebook"
+          echo "  3. Token validity (60 days)"
