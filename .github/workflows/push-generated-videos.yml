@@ -1,0 +1,101 @@
+name: Push Generated Quranic Videos to Repository
+
+on:
+  workflow_dispatch:  # Manual trigger only
+  schedule:
+    # Run every 30 minutes to check for new videos
+    - cron: '*/30 * * * *'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  push-videos:
+    runs-on: ubuntu-latest
+    name: Generate and Push Quranic Videos
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Cache FFmpeg
+        uses: actions/cache@v3
+        with:
+          path: ~/ffmpeg
+          key: ffmpeg-${{ runner.os }}
+          restore-keys: ffmpeg-
+
+      - name: Install FFmpeg
+        run: |
+          if ! command -v ffmpeg &> /dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y ffmpeg
+          fi
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Generate Quranic videos
+        run: |
+          echo "🎬 Generating Quranic videos..."
+          python generate_simple_video.py
+          echo "✅ Video generation completed!"
+
+      - name: Check for new videos
+        id: check-videos
+        run: |
+          if [ -d "generated_videos" ] && [ "$(ls -A generated_videos/*.mp4 2>/dev/null)" ]; then
+            echo "videos_found=true" >> $GITHUB_OUTPUT
+            echo "✅ New videos found in generated_videos/"
+            ls -lh generated_videos/*.mp4 | wc -l | xargs echo "Total videos:"
+          else
+            echo "videos_found=false" >> $GITHUB_OUTPUT
+            echo "⚠️ No new videos found"
+          fi
+
+      - name: Configure git
+        if: steps.check-videos.outputs.videos_found == 'true'
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+
+      - name: Add and commit videos
+        if: steps.check-videos.outputs.videos_found == 'true'
+        run: |
+          git add generated_videos/*.mp4
+          git commit -m "Add generated Quranic videos - $(date +'%Y-%m-%d %H:%M:%S')" || echo "No changes to commit"
+
+      - name: Push videos to repository
+        if: steps.check-videos.outputs.videos_found == 'true'
+        run: |
+          git config http.postBuffer 524288000
+          git push origin main
+          echo "✅ Videos pushed to repository!"
+
+      - name: Create summary
+        if: always()
+        run: |
+          echo "## Workflow Summary"
+          echo "- Generated videos: ${{ steps.check-videos.outputs.videos_found }}"
+          echo "- Timestamp: $(date)"
+          echo "- Branch: main"
+
+      - name: Upload summary artifact
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: generation-logs
+          path: |
+            generated_videos/
+            *.log
+          retention-days: 7
