@@ -49,13 +49,22 @@ jobs:
         id: get-groups
         run: |
           # Extract first group from any reciter file
-          GROUP=$(python -c "import json; data = json.load(open('quran_groups/reciter_1_AbdulBaset_AbdulSamad_groups.json')); print(list(data.keys())[0] if data else 'reciter1_s001_001-007')")
+          GROUP=$(python -c "
+import json
+data = json.load(open('quran_groups/reciter_1_AbdulBaset_AbdulSamad_groups.json'))
+groups = data.get('groups', {})
+if groups:
+    first_group = list(groups.keys())[0]
+    print(first_group)
+else:
+    print('reciter1_s001_001-007')
+          ")
           echo "group=$GROUP" >> $GITHUB_OUTPUT
           echo "Selected group: $GROUP"
 
       - name: Generate Quranic videos
         run: |
-          echo "🎬 Generating Quranic videos..."
+          echo "🎬 Generating Quranic videos with group: ${{ steps.get-groups.outputs.group }}"
           python generate_simple_video.py --group "${{ steps.get-groups.outputs.group }}"
           echo "✅ Video generation completed!"
 
