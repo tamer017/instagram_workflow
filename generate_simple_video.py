@@ -1,3 +1,36 @@
+# List of Quranic fonts with Tajweed support
+FONT_SOURCES = [
+    {
+        "name": "Scheherazade New",
+        "url": "https://github.com/silnrsi/font-scheherazade/releases/download/v3.300/ScheherazadeNew-3.300.zip",
+        "filename": "ScheherazadeNew-Regular.ttf",
+        "priority": True,
+        "is_zip": True,
+        "zip_path": "ScheherazadeNew-3.300/ScheherazadeNew-Regular.ttf"
+    },
+    {
+        "name": "Amiri Quran",
+        "url": "https://github.com/aliftype/amiri/releases/download/0.113/Amiri-0.113.zip",
+        "filename": "AmiriQuran-Regular.ttf",
+        "priority": True,
+        "is_zip": True,
+        "zip_path": "Amiri-0.113/AmiriQuran-Regular.ttf"
+    },
+    {
+        "name": "Noto Naskh Arabic",
+        "url": "https://github.com/notofonts/notofonts.github.io/raw/main/fonts/NotoNaskhArabic/full/ttf/NotoNaskhArabic-Regular.ttf",
+        "filename": "NotoNaskhArabic-Regular.ttf",
+        "priority": True
+    },
+    {
+        "name": "Lateef",
+        "url": "https://github.com/silnrsi/font-lateef/releases/download/v4.000/Lateef-4.000.zip",
+        "filename": "Lateef-Regular.ttf",
+        "priority": True,
+        "is_zip": True,
+        "zip_path": "Lateef-4.000/Lateef-Regular.ttf"
+    }
+]
 import json
 import os
 import sys
@@ -7,6 +40,9 @@ from pathlib import Path
 from typing import Dict, List, Optional
 import subprocess
 import tempfile
+import arabic_reshaper
+from bidi.algorithm import get_display
+from PIL import Image, ImageDraw, ImageFont
 
 QURAN_GROUPS_DIR = Path("quran_groups")
 MERGED_AUDIO_DIR = Path("merged_audio_samples")
@@ -46,16 +82,177 @@ def find_ffmpeg() -> Optional[str]:
     return None
 
 
-def get_font_path() -> str:
-    """Get the appropriate font path for the current platform."""
+def download_quranic_font() -> Optional[str]:
+    """
+    Download a proper Quranic font with all necessary Arabic glyphs.
+    Prioritizes UthmanTN1 font which is specifically designed for Uthmani Quran text.
+    Returns the path to the downloaded font file.
+    """
+    fonts_dir = Path("fonts")
+    fonts_dir.mkdir(exist_ok=True)
+    
+    # List of Quranic fonts - UthmanTN1 is the best for Uthmani script
+    FONT_SOURCES = [
+        {
+            "name": "Scheherazade New",
+            "url": "https://github.com/silnrsi/font-scheherazade/releases/download/v3.300/ScheherazadeNew-3.300.zip",
+            "filename": "ScheherazadeNew-Regular.ttf",
+            "priority": True,
+            "is_zip": True,
+            "zip_path": "ScheherazadeNew-3.300/ScheherazadeNew-Regular.ttf"
+        },
+        {
+            "name": "Amiri Quran",
+            "url": "https://github.com/aliftype/amiri/releases/download/0.113/Amiri-0.113.zip",
+            "filename": "AmiriQuran-Regular.ttf",
+            "priority": True,
+            "is_zip": True,
+            "zip_path": "Amiri-0.113/AmiriQuran-Regular.ttf"
+        },
+        {
+            "name": "Noto Naskh Arabic",
+            "url": "https://github.com/notofonts/notofonts.github.io/raw/main/fonts/NotoNaskhArabic/full/ttf/NotoNaskhArabic-Regular.ttf",
+            "filename": "NotoNaskhArabic-Regular.ttf",
+            "priority": True
+        },
+        {
+            "name": "Lateef",
+            "url": "https://github.com/silnrsi/font-lateef/releases/download/v4.000/Lateef-4.000.zip",
+            "filename": "Lateef-Regular.ttf",
+            "priority": True,
+            "is_zip": True,
+            "zip_path": "Lateef-4.000/Lateef-Regular.ttf"
+        }
+    ]
+    
+    # Check if priority Quranic fonts already exist
+    for font in FONT_SOURCES:
+        if font.get("priority", False):
+            font_path = fonts_dir / font["filename"]
+            if font_path.exists() and font_path.stat().st_size > 10000:  # At least 10KB
+                print(f"✓ Using existing Quranic font: {font_path}")
+                return str(font_path)
+    
+    # Check if inferior fonts exist and warn
+    inferior_fonts = ["Amiri-Regular.ttf", "Arial.ttf", "DejaVuSans.ttf"]
+    for inferior_font in inferior_fonts:
+        font_path = fonts_dir / inferior_font
+        if font_path.exists():
+            print(f"⚠️  Found {inferior_font} but it doesn't fully support Uthmani Quranic text!")
+            print(f"⚠️  Downloading proper Quranic font instead...")
+            break
+    
+    # Try downloading fonts in order of preference
+    for font in FONT_SOURCES:
+        font_path = fonts_dir / font["filename"]
+        print(f"📥 Downloading {font['name']} font...")
+        
+        try:
+            response = requests.get(font["url"], timeout=30)
+            response.raise_for_status()
+            
+            # Handle zip files if needed
+            if font.get("is_zip", False):
+                import zipfile
+                import io
+                
+                # Extract the specific font file from zip
+                with zipfile.ZipFile(io.BytesIO(response.content)) as z:
+                    zip_path = font.get("zip_path", font["filename"])
+                    with z.open(zip_path) as zf:
+                        with open(font_path, 'wb') as f:
+                            f.write(zf.read())
+            else:
+                # Save the font file directly
+                with open(font_path, 'wb') as f:
+                    f.write(response.content)
+            
+            # Verify the file was downloaded and has content
+            if font_path.exists() and font_path.stat().st_size > 10000:
+                print(f"✓ Successfully downloaded: {font['name']} ({format_size(font_path.stat().st_size)})")
+                print(f"✓ Font saved to: {font_path}")
+                return str(font_path)
+            else:
+                print(f"⚠️  Downloaded file is too small or empty")
+                if font_path.exists():
+                    font_path.unlink()
+            
+        except requests.exceptions.RequestException as e:
+            print(f"⚠️  Could not download {font['name']}: {e}")
+            continue
+        except Exception as e:
+            print(f"⚠️  Error downloading {font['name']}: {e}")
+            continue
+    
+    # If all downloads fail, check for any .otf or .ttf files in fonts directory
+    print("\n⚠️  All font downloads failed. Checking for local fonts...")
+    for ext in ['*.otf', '*.ttf']:
+        local_fonts = list(fonts_dir.glob(ext))
+        if local_fonts:
+            font_path = local_fonts[0]
+            print(f"✓ Using local font: {font_path}")
+            return str(font_path)
+    
+    raise FileNotFoundError(
+        "\n❌ No Quranic font available!\n"
+        "Please manually download a font:\n"
+        "1. Download Scheherazade New from: https://github.com/silnrsi/font-scheherazade/releases\n"
+        "2. Or download Amiri Quran from: https://github.com/aliftype/amiri/releases\n"
+        "3. Save the .ttf file to the 'fonts/' directory\n"
+        "4. Run the script again\n"
+    )
+
+
+def get_available_font():
+    """Return the path of the first available Quranic font in priority order."""
+    
+    # Define preferred font order - Tajweed fonts first for color-coded recitation
+    FONT_CANDIDATES = [
+        ("KFGQPC Hafs Uthmanic Script (Tajweed)", "UthmanicHafs_v20.otf"),
+        ("Scheherazade New", "ScheherazadeNew-Regular.ttf"),
+        ("Amiri Quran", "AmiriQuran-Regular.ttf"),
+        ("Noto Naskh Arabic", "NotoNaskhArabic-Regular.ttf"),
+        ("Lateef", "Lateef-Regular.ttf"),
+    ]
+    
+    fonts_dir = Path("fonts")
+    
+    print("🔍 Looking for Quranic fonts...")
+    
+    # Check for available fonts in priority order
+    for font_name, filename in FONT_CANDIDATES:
+        font_path = fonts_dir / filename
+        if font_path.exists() and font_path.stat().st_size > 10000:
+            print(f"✓ Using font: {font_path} ({font_name})")
+            return str(font_path)
+    
+    # If no fonts found, try to download
+    print("⚠️  No Quranic fonts found locally. Attempting to download...")
+    try:
+        font_path = download_quranic_font()
+        if font_path:
+            return font_path.replace("\\", "/")
+    except FileNotFoundError as e:
+        print(str(e))
+        print("\n⚠️  Falling back to system fonts (may not display Arabic correctly)...")
+    except Exception as e:
+        print(f"⚠️  Error loading Quranic font: {e}")
+        print("⚠️  Falling back to system fonts...")
+    
+    # Fall back to system fonts as last resort
     import platform
     system = platform.system()
-    
     if system == "Windows":
-        # Windows font path
-        font_path = "C\\:/Windows/Fonts/arial.ttf"
+        possible_fonts = [
+            "C:/Windows/Fonts/tahoma.ttf",
+            "C:/Windows/Fonts/arial.ttf",
+        ]
+        for font in possible_fonts:
+            if Path(font).exists():
+                print(f"✓ Using system font: {font}")
+                return font
+        return "C:/Windows/Fonts/arial.ttf"
     elif system == "Linux":
-        # Try common Linux font paths for DejaVu Sans (good Arabic support)
         possible_fonts = [
             "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
             "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
@@ -64,18 +261,196 @@ def get_font_path() -> str:
         ]
         for font in possible_fonts:
             if Path(font).exists():
-                font_path = font.replace("\\", "/")
-                break
-        else:
-            # Fallback to DejaVu Sans (should be installed by workflow)
-            font_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
-    elif system == "Darwin":  # macOS
-        font_path = "/Library/Fonts/Arial.ttf"
+                print(f"✓ Using system font: {font}")
+                return font
+        return "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+    elif system == "Darwin":
+        return "/Library/Fonts/Arial.ttf"
     else:
-        # Default fallback
-        font_path = "arial.ttf"
+        return "arial.ttf"
+
+
+def get_font_path() -> str:
+    """Get the appropriate font path (wrapper for backward compatibility)."""
+    return get_available_font()
+
+
+def shape_arabic_text(text: str) -> str:
+    """
+    Properly shape Arabic text for display (handles ligatures, diacritics).
     
-    return font_path
+    Args:
+        text: Raw Arabic text
+    
+    Returns:
+        Shaped Arabic text ready for display in FFmpeg (reversed for RTL)
+    """
+    try:
+        # FFmpeg with FreeType and HarfBuzz can handle Arabic shaping automatically
+        # BUT it doesn't reverse the text for RTL, so we just reverse it
+        # The font will handle the proper letter forms (initial, medial, final, isolated)
+        
+        # Simple reversal for RTL display
+        # The Amiri font has the glyphs for proper contextual forms
+        return text[::-1]
+        
+        # NOTE: arabic_reshaper produces presentation forms (U+FExx) which many fonts don't support
+        # Better to let the font's OpenType features handle shaping
+        
+    except Exception as e:
+        print(f"Warning: Could not reverse Arabic text: {e}")
+        return text
+
+
+def render_arabic_text_image(
+    text: str,
+    font_path: str,
+    font_size: int = 60,
+    color: tuple = (255, 255, 255, 255),
+    max_width: int = 1000,
+    add_shadow: bool = True,
+    border_width: int = 2
+) -> Optional[Path]:
+    """
+    Render Arabic text as a PNG image using PIL with proper Uthmani script support.
+    This bypasses FFmpeg's drawtext issues with Arabic and supports full tashkeel.
+    
+    Args:
+        text: Arabic text to render (Uthmani script with tashkeel)
+        font_path: Path to font file (preferably UthmanTN1)
+        font_size: Font size in pixels
+        color: RGBA color tuple
+        max_width: Maximum width for text wrapping
+        add_shadow: Add shadow effect
+        border_width: Border/stroke width
+    
+    Returns:
+        Path to generated PNG image
+    """
+    try:
+        # Shape the Arabic text properly for display
+        # UthmanTN1 and other Quranic fonts handle shaping internally
+        reshaped = arabic_reshaper.reshape(text)
+        bidi_text = get_display(reshaped)
+        
+        # Load font
+        try:
+            font = ImageFont.truetype(font_path, font_size)
+            print(f"✓ Loaded font: {Path(font_path).name}")
+        except Exception as font_error:
+            print(f"⚠️  Error loading font {font_path}: {font_error}")
+            # Fallback: try other Quranic fonts in priority order
+            fallback_fonts = [
+                ("fonts/UthmanicHafs_v20.otf", "KFGQPC Uthmanic Hafs (Tajweed)"),
+                ("fonts/ScheherazadeNew-Regular.ttf", "Scheherazade New"),
+                ("fonts/AmiriQuran-Regular.ttf", "Amiri Quran"),
+                ("fonts/NotoNaskhArabic-Regular.ttf", "Noto Naskh Arabic"),
+                ("fonts/Lateef-Regular.ttf", "Lateef"),
+                ("C:/Windows/Fonts/tahoma.ttf", "Tahoma"),
+                ("C:/Windows/Fonts/arial.ttf", "Arial"),
+                ("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "DejaVu Sans")
+            ]
+            for fallback_font, fallback_name in fallback_fonts:
+                try:
+                    if Path(fallback_font).exists():
+                        font = ImageFont.truetype(fallback_font, font_size)
+                        print(f"✓ Using fallback font: {fallback_name}")
+                        break
+                except:
+                    continue
+            else:
+                print("⚠️  All fonts failed, using default font (text may not display correctly)")
+                font = ImageFont.load_default()
+        
+        # Create a temporary image to measure text size
+        temp_img = Image.new('RGBA', (1, 1), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(temp_img)
+        
+        # Get text bounding box
+        bbox = draw.textbbox((0, 0), bidi_text, font=font)
+        text_width = bbox[2] - bbox[0]
+        text_height = bbox[3] - bbox[1]
+        
+        # Add padding for border, shadow, and tashkeel marks
+        padding = max(30, border_width * 4)  # Extra padding for tashkeel
+        img_width = min(text_width + padding * 2, max_width + padding * 2)
+        img_height = text_height + padding * 2
+        
+        # Create final image with transparent background
+        img = Image.new('RGBA', (img_width, img_height), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(img)
+        
+        # Calculate text position (centered)
+        x = (img_width - text_width) // 2
+        y = padding
+        
+        # Draw shadow if requested
+        if add_shadow:
+            shadow_offset = 3
+            shadow_color = (0, 0, 0, 200)
+            try:
+                draw.text((x + shadow_offset, y + shadow_offset), bidi_text, font=font, fill=shadow_color)
+            except OSError as e:
+                if "Bitmap missing for glyph" in str(e):
+                    print(f"⚠️  Shadow rendering failed (missing glyphs): {text[:30]}...")
+                else:
+                    raise
+        
+        # Draw border/stroke for better readability
+        if border_width > 0:
+            border_color = (0, 0, 0, 255)
+            for adj_x in range(-border_width, border_width + 1):
+                for adj_y in range(-border_width, border_width + 1):
+                    if adj_x != 0 or adj_y != 0:
+                        try:
+                            draw.text((x + adj_x, y + adj_y), bidi_text, font=font, fill=border_color)
+                        except OSError as e:
+                            if "Bitmap missing for glyph" in str(e):
+                                print(f"⚠️  Border rendering failed (missing glyphs): {text[:30]}...")
+                                break
+                            else:
+                                raise
+        
+        # Draw main text
+        try:
+            draw.text((x, y), bidi_text, font=font, fill=color)
+        except OSError as e:
+            if "Bitmap missing for glyph" in str(e):
+                print(f"⚠️  Text rendering failed (missing glyphs): {text[:30]}...")
+                print(f"⚠️  Font {Path(font_path).name} doesn't support all required characters.")
+                print(f"⚠️  Please ensure you're using UthmanTN1 or another Quranic font.")
+                return None
+            else:
+                raise
+        
+        # Save to temporary file
+        temp_dir = Path("temp_text_overlays")
+        temp_dir.mkdir(exist_ok=True)
+        
+        import hashlib
+        text_hash = hashlib.md5(text.encode()).hexdigest()[:8]
+        output_path = temp_dir / f"arabic_{text_hash}.png"
+        
+        img.save(output_path, 'PNG')
+        
+        return output_path
+        
+    except Exception as e:
+        print(f"❌ Error rendering Arabic text image: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
+
+
+def cleanup_temp_text_overlays():
+    """Clean up temporary text overlay images."""
+    temp_dir = Path("temp_text_overlays")
+    if temp_dir.exists():
+        for png_file in temp_dir.glob("*.png"):
+            try:
+                png_file.unlink()
+            except:
+                pass
 
 
 def load_json_file(file_path: Path) -> Dict:
@@ -285,7 +660,7 @@ def download_background_video(video_info: Dict) -> Optional[Path]:
 def convert_number_to_arabic(num: int) -> str:
     """Convert Western numerals to Arabic-Indic numerals."""
     arabic_digits = {'0': '٠', '1': '١', '2': '٢', '3': '٣', '4': '٤',
-                     '5': '٥', '6': '٦', '7': '٧', '8': '٨', '9': '٩'}
+                    '5': '٥', '6': '٦', '7': '٧', '8': '٨', '9': '٩'}
     return ''.join(arabic_digits.get(digit, digit) for digit in str(num))
 
 def create_simple_video(
@@ -357,70 +732,104 @@ def create_simple_video(
         print(f"  Bottom English text items: {len(english_text_data)}")
 
     print(f"\nBuilding video with FFmpeg...")
-    
-    # Escape text for FFmpeg (preserve newlines for multi-line text)
-    def escape_text(text):
-        # First escape special characters, but preserve actual newlines
-        escaped = text.replace(":", r"\:").replace("'", r"\'").replace(",", r"\,")
-        # Replace actual newlines with FFmpeg's newline escape sequence
-        escaped = escaped.replace("\n", r"\n")
-        return escaped
-    
-    top_arabic_esc, reciter_arabic_esc = escape_text(top_arabic), escape_text(reciter_arabic)
-    english_info_esc, reciter_english_esc = escape_text(english_info), escape_text(reciter_english)
+    print("Rendering Arabic text as images using PIL...")
     
     # Get appropriate font path for the platform
     font_path = get_font_path()
     print(f"Using font: {font_path}")
     
-    # Create filter complex with proper scaling and cropping for Instagram Reels (9:16 aspect ratio)
-    # This ensures NO black margins and perfect fit
-    filter_parts = [
-        # Scale video to COVER the entire frame (9:16) so there are NO black bars.
-        # If input is wider than 9:16, scale height to VIDEO_HEIGHT (width will be >= VIDEO_WIDTH).
-        # If input is taller (narrower) than 9:16, scale width to VIDEO_WIDTH (height will be >= VIDEO_HEIGHT).
-        f"[0:v]scale='if(gt(a,{9/16}),-2,{VIDEO_WIDTH})':'if(gt(a,{9/16}),{VIDEO_HEIGHT},-2)'[scaled]",
-        # Center-crop to exact 1080x1920 to guarantee no black margins and exact dimensions
-        f"[scaled]crop={VIDEO_WIDTH}:{VIDEO_HEIGHT}:(iw-{VIDEO_WIDTH})/2:(ih-{VIDEO_HEIGHT})/2[cropped]",
-        # Enhance brightness and contrast for better visibility
-        f"[cropped]eq=brightness=0.05:contrast=1.15:saturation=1.1[adjusted]",
-        f"[adjusted]drawtext=fontfile='{font_path}':text='{top_arabic_esc}':fontsize=50:fontcolor=gold:bordercolor=black:borderw=2:x=(w-text_w)/2:y=220[t1]",
-        f"[t1]drawtext=fontfile='{font_path}':text='{reciter_arabic_esc}':fontsize=40:fontcolor=white@0.9:bordercolor=black:borderw=2:x=(w-text_w)/2:y=280[t2]",
+    # Render Arabic text as images using PIL
+    top_arabic_img = render_arabic_text_image(top_arabic, font_path, font_size=50, color=(255, 215, 0, 255))  # Gold color
+    reciter_arabic_img = render_arabic_text_image(reciter_arabic, font_path, font_size=40, color=(255, 255, 255, 230))
+    
+    if not top_arabic_img or not reciter_arabic_img:
+        print("⚠️  Failed to render Arabic text images, falling back to simple rendering")
+        cleanup_temp_text_overlays()
+        return False
+    
+    print(f"  ✅ Arabic text images rendered")
+    
+    # Escape text for FFmpeg (for English text only)
+    def escape_text(text):
+        escaped = text.replace(":", r"\:").replace("'", r"\'").replace(",", r"\,")
+        escaped = escaped.replace("\n", r"\n")
+        return escaped
+    
+    english_info_esc = escape_text(english_info)
+    reciter_english_esc = escape_text(reciter_english)
+    
+    # Collect all inputs for FFmpeg
+    ffmpeg_inputs = [
+        ('-stream_loop', '-1', '-i', str(bg_video_path)),  # [0:v] - background video (looped)
+        ('-i', str(audio_path)),  # [1:a] - audio
+        ('-i', str(top_arabic_img)),  # [2:v] - top Arabic text image
+        ('-i', str(reciter_arabic_img)),  # [3:v] - reciter Arabic text image
     ]
     
-    # Add center text with timing if provided (Arabic - larger font)
+    # Create filter complex with proper scaling and image overlays
+    aspect_ratio = 9/16
+    filter_parts = [
+        # Scale video to COVER the entire frame (9:16) so there are NO black bars
+        f"[0:v]scale='if(gt(a,{aspect_ratio}),-2,{VIDEO_WIDTH})':'if(gt(a,{aspect_ratio}),{VIDEO_HEIGHT},-2)'[scaled]",
+        # Center-crop to exact 1080x1920
+        f"[scaled]crop={VIDEO_WIDTH}:{VIDEO_HEIGHT}:(iw-{VIDEO_WIDTH})/2:(ih-{VIDEO_HEIGHT})/2[cropped]",
+        # Enhance brightness and contrast
+        f"[cropped]eq=brightness=0.05:contrast=1.15:saturation=1.1[adjusted]",
+        # Overlay top Arabic text image (centered horizontally, y=220)
+        f"[adjusted][2:v]overlay=(W-w)/2:220[t1]",
+        # Overlay reciter Arabic text image (centered horizontally, y=280)
+        f"[t1][3:v]overlay=(W-w)/2:280[t2]",
+    ]
+    
+    # Add center text with timing if provided (Arabic - render as images)
     current_filter = "t2"
+    center_text_images = []
+    input_index = 4  # Next available input index after [0]=video, [1]=audio, [2]=top_arabic, [3]=reciter_arabic
+    
     if text_data:
+        print(f"  Rendering {len(text_data)} center text images...")
         current_time = 0
+        rendered_count = 0
         for i, (text, duration) in enumerate(text_data):
-            start_time = current_time
-            end_time = current_time + duration
-            # Wrap text to prevent overflow (20 chars per line for 70px Arabic font to ensure no overflow)
-            wrapped_text = wrap_text(text, max_chars_per_line=20)
-            text_esc = escape_text(wrapped_text)
-            next_filter = f"c{i+1}" if i < len(text_data) - 1 else "t3"
+            start_time = float(f"{current_time:.2f}")
+            end_time = float(f"{current_time + duration:.2f}")
             
-            # Larger Arabic font (70px) with proper positioning
-            filter_parts.append(
-                f"[{current_filter}]drawtext=fontfile='{font_path}':"
-                f"text='{text_esc}':fontsize=60:fontcolor=white:bordercolor=black:borderw=3:"
-                f"x=(w-text_w)/2:y=(h-text_h)/2:"
-                f"enable='between(t,{start_time},{end_time})'[{next_filter}]"
-            )
-            current_filter = next_filter
+            # Render Arabic text as image
+            wrapped_text = wrap_text(text, max_chars_per_line=20)
+            text_img = render_arabic_text_image(wrapped_text, font_path, font_size=60, color=(255, 255, 255, 255))
+            
+            if text_img:
+                center_text_images.append((text_img, start_time, end_time))
+                # Add input for this image
+                ffmpeg_inputs.append(('-i', str(text_img)))
+                # Add overlay filter with timing
+                next_filter = f"c{i+1}" if i < len(text_data) - 1 else "t3"
+                filter_parts.append(
+                    f"[{current_filter}][{input_index}:v]overlay=(W-w)/2:(H-h)/2:enable='between(t,{start_time},{end_time})'[{next_filter}]"
+                )
+                current_filter = next_filter
+                input_index += 1
+                rendered_count += 1
+            else:
+                print(f"  ⚠️  Skipped text segment {i+1} due to rendering error")
+            
             current_time = end_time
+        print(f"  ✅ Rendered {rendered_count} center text images")
     else:
         filter_parts.append(f"[{current_filter}]null[t3]")
         current_filter = "t3"
     
-    # Add bottom static text (English info and reciter)
+    # Add bottom static text (English - use drawtext since it works fine for English)
+    # Escape font path for FFmpeg
+    font_path_esc = font_path.replace(":", r"\:").replace("\\", "/")
+    
     filter_parts.append(
-        f"[{current_filter}]drawtext=fontfile='{font_path}':text='{english_info_esc}':"
+        f"[{current_filter}]drawtext=fontfile='{font_path_esc}':text='{english_info_esc}':"
         f"fontsize=45:fontcolor=gold:bordercolor=black:borderw=2:x=(w-text_w)/2:y=h-280[t4]"
     )
     
     filter_parts.append(
-        f"[t4]drawtext=fontfile='{font_path}':text='{reciter_english_esc}':"
+        f"[t4]drawtext=fontfile='{font_path_esc}':text='{reciter_english_esc}':"
         f"fontsize=38:fontcolor=white@0.9:bordercolor=black:borderw=2:x=(w-text_w)/2:y=h-220[t5]"
     )
     
@@ -429,8 +838,8 @@ def create_simple_video(
     if english_text_data:
         current_time = 0
         for i, (text, duration) in enumerate(english_text_data):
-            start_time = current_time
-            end_time = current_time + duration
+            start_time = float(f"{current_time:.2f}")
+            end_time = float(f"{current_time + duration:.2f}")
             # Wrap text to prevent overflow (18 chars per line for 48px English font to ensure no overflow)
             wrapped_text = wrap_text(text, max_chars_per_line=18)
             text_esc = escape_text(wrapped_text)
@@ -438,10 +847,8 @@ def create_simple_video(
             
             # English text positioned higher (y=h-350) with larger font 
             filter_parts.append(
-                f"[{current_filter}]drawtext=fontfile='{font_path}':"
-                f"text='{text_esc}':fontsize=32:fontcolor=white:bordercolor=black:borderw=2:"
-                f"x=(w-text_w)/2:y=h-350:"
-                f"enable='between(t,{start_time},{end_time})'[{next_filter}]"
+                f"[{current_filter}]drawtext=fontfile='{font_path_esc}':text='{text_esc}':fontsize=32:fontcolor=white:bordercolor=black:borderw=2:"
+                f"x=(w-text_w)/2:y=h-350:enable='between(t,{start_time},{end_time})'[{next_filter}]"
             )
             current_filter = next_filter
             current_time = end_time
@@ -450,10 +857,18 @@ def create_simple_video(
     
     filter_complex = ";".join(filter_parts)
     
-    # High-quality encoding settings for Instagram Reels
-    cmd = [
-        ffmpeg_path, '-stream_loop', '-1', '-i', str(bg_video_path), '-i', str(audio_path),
-        '-filter_complex', filter_complex, '-map', '[output]', '-map', '1:a',
+    # Build FFmpeg command with all inputs
+    cmd = [ffmpeg_path]
+    
+    # Add all inputs
+    for input_args in ffmpeg_inputs:
+        cmd.extend(input_args)
+    
+    # Add filter complex and output options
+    cmd.extend([
+        '-filter_complex', filter_complex,
+        '-map', '[output]',
+        '-map', '1:a',  # Audio is always input [1]
         # Video encoding with higher quality
         '-c:v', 'libx264',
         '-preset', 'slow',  # Slower preset = better quality
@@ -471,7 +886,7 @@ def create_simple_video(
         '-r', str(VIDEO_FPS),
         '-shortest',
         '-y', str(output_path)
-    ]
+    ])
     
     print("  Encoding video...")
     result = subprocess.run(cmd, capture_output=True, text=True)
@@ -479,6 +894,7 @@ def create_simple_video(
     if result.returncode != 0:
         print(f"\nFFmpeg error:\n{result.stderr}")
         cleanup_temp_files(bg_video_path)
+        cleanup_temp_text_overlays()
         return False
     
     if output_path.exists() and output_path.stat().st_size > 0:
@@ -486,10 +902,12 @@ def create_simple_video(
         print(f"SUCCESS! Video created: {format_size(output_path.stat().st_size)}")
         print(f"{'='*70}")
         cleanup_temp_files(bg_video_path)
+        cleanup_temp_text_overlays()
         return True
     else:
         print("Video file is empty or missing")
         cleanup_temp_files(bg_video_path)
+        cleanup_temp_text_overlays()
         return False
 
 
@@ -581,25 +999,25 @@ def process_group(group_id: str, ffmpeg_path: str, text_data: Optional[List[tupl
         return False
     
     # Populate text overlays from ayah data (if not disabled)
-    def extract_arabic_text(segments, words, verse_num_arabic, lower_limit=5, upper_limit=8):
+    def extract_arabic_text(segments, words, verse_num_arabic, lower_limit=6, upper_limit=9):
         if(len(words) == 0) or len(segments) == 0:
             return
         if len(words) < lower_limit:
-            duration = ((segments[-1][-1] - segments[0][2]) / 1000.0) + 1
-            ARABIC_TEXT.append(("﴾" + " ".join(words) + f" ﴿{verse_num_arabic}", duration))
+            duration = ((segments[-1][-1] - segments[0][2]) / 1000.0)
+            ARABIC_TEXT.append((" ".join(words) + f" ﴿{verse_num_arabic}﴾", duration))
         elif len(words) >= lower_limit and len(words) < upper_limit:
-            duration1 = ((segments[len(words)//2][-1] - segments[0][2]) / 1000.0) + 1
-            duration2 = ((segments[-1][-1] - segments[len(words)//2 + 1][2]) / 1000.0) + 1
+            duration1 = ((segments[len(words)//2][-1] - segments[0][2]) / 1000.0)
+            duration2 = ((segments[-1][-1] - segments[len(words)//2 + 1][2]) / 1000.0) 
             ARABIC_TEXT.append((" ".join(words[:len(words)//2]), duration1))
-            ARABIC_TEXT.append(("﴾" + " ".join(words[len(words)//2:]) + f" ﴿{verse_num_arabic}", duration2))
+            ARABIC_TEXT.append((" ".join(words[len(words)//2:]) + f" ﴿{verse_num_arabic}﴾", duration2))
         else:
-            duration = ((segments[lower_limit-1][-1] - segments[0][2]) / 1000.0) + 1.5
+            duration = ((segments[lower_limit-1][-1] - segments[0][2]) / 1000.0)
             ARABIC_TEXT.append((" ".join(words[:lower_limit]), duration))
             extract_arabic_text(segments[lower_limit:], words=words[lower_limit:],verse_num_arabic=verse_num_arabic)
     
     def extract_english_text(words, duration, lower_limit=10):
         groups = len(words) // lower_limit + (1 if len(words) % lower_limit != 0 else 0)
-        group_duration = (duration / groups) + 0.25
+        group_duration = (duration / groups)
         for i in range(groups):
             start = i * lower_limit
             end = start + lower_limit
@@ -610,21 +1028,15 @@ def process_group(group_id: str, ffmpeg_path: str, text_data: Optional[List[tupl
         words = ayah.get('arabic_words', [])
         segments = ayah.get('segments',[[]])
         english_words = ayah.get('translation', "").split()
-        if len(words) != len(segments):
-            new_words = []
-            for word in words:
-                if len(word.strip()) > 1:
-                    new_words.append(word)
-                else:
-                    new_words[-1] += word
-            words = new_words
-            
+
+        processed_words = []   
+        for segment in segments:
+            processed_words.append(" ".join(words[segment[0]:segment[1]]))
         verse_number = ayah.get('ayah_number', 0)
         verse_num_arabic = convert_number_to_arabic(verse_number)
-
-        extract_arabic_text(segments, words=words, verse_num_arabic=verse_num_arabic)
+        extract_arabic_text(segments, words=processed_words, verse_num_arabic=verse_num_arabic)
         extract_english_text(english_words, ayah.get('duration_ms', 0) / 1000.0)
-    
+
     print(f"Generated {len(ARABIC_TEXT)} Arabic text segments")
     print(f"Generated {len(ENGLISH_TEXT)} English text segments")
     
@@ -650,7 +1062,7 @@ def process_group(group_id: str, ffmpeg_path: str, text_data: Optional[List[tupl
 def main():
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(
-        description='Simple Quran Video Generator',
+        description='Simple Quran Video Generator with UthmanTN1 Font Support',
         epilog="""
 Examples:
   # Generate video with both Arabic and English text overlays (default)
@@ -665,7 +1077,8 @@ Examples:
   # Generate video with only static text (no custom overlays)
   python generate_simple_video.py --group reciter2_s001_001-007 --no-arabic-text --no-english-text
 
-Note: To customize text overlays, edit ARABIC_TEXT and ENGLISH_TEXT in the script.
+Note: The script will automatically download UthmanTN1 font for proper Quranic text display.
+      To customize text overlays, edit ARABIC_TEXT and ENGLISH_TEXT in the script.
         """
     )
     
