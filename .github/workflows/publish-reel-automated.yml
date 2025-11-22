@@ -1,0 +1,95 @@
+name: Publish Instagram Reel (Automated)
+
+on:
+  schedule:
+    # Run every 5 minutes
+    - cron: '*/5 * * * *'
+  workflow_dispatch:  # Allow manual trigger from GitHub Actions tab
+
+permissions:
+  contents: read  # Only needs read access for code
+  pages: write    # For any GitHub Pages updates if needed
+
+jobs:
+  publish-reel:
+    runs-on: ubuntu-latest
+    name: Generate and Publish Reel
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Cache FFmpeg
+        uses: actions/cache@v3
+        with:
+          path: ~/ffmpeg
+          key: ffmpeg-${{ runner.os }}
+          restore-keys: ffmpeg-
+
+      - name: Install FFmpeg
+        run: |
+          if ! command -v ffmpeg &> /dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y ffmpeg
+          fi
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Generate and publish Quranic reel
+        env:
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+          LONG_LIVED_TOKEN: ${{ secrets.LONG_LIVED_TOKEN }}
+          APP_ID: ${{ secrets.APP_ID }}
+          APP_SECRET: ${{ secrets.APP_SECRET }}
+          CAPTION: ${{ secrets.REEL_CAPTION }}
+          MAX_POLL_SECONDS: '1500'
+          POLL_INTERVAL: '10'
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: |
+          echo "🎬 Starting automated Instagram reel generation and publishing..."
+          python publish_reel.py
+          echo "✅ Workflow completed!"
+
+      - name: Upload artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-logs
+          path: |
+            generated_videos/
+            *.log
+          retention-days: 3
+
+      - name: Notify on failure
+        if: failure()
+        run: |
+          echo "❌ Workflow failed. Check the logs above for details."
+          exit 1
+
+  # Optional: Monitor token expiration
+  check-token-status:
+    runs-on: ubuntu-latest
+    needs: publish-reel
+    if: always()
+    steps:
+      - name: Check Instagram token health
+        env:
+          LONG_LIVED_TOKEN: ${{ secrets.LONG_LIVED_TOKEN }}
+        run: |
+          if [ -z "$LONG_LIVED_TOKEN" ]; then
+            echo "⚠️  WARNING: IG_USER_ID or LONG_LIVED_TOKEN not configured!"
+            echo "Please add these secrets in Settings → Secrets and variables → Actions"
+            exit 0
+          fi
+          echo "✅ Instagram credentials are configured"
