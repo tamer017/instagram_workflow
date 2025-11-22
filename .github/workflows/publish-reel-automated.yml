@@ -51,7 +51,7 @@ jobs:
           LONG_LIVED_TOKEN: ${{ secrets.LONG_LIVED_TOKEN }}
           APP_ID: ${{ secrets.APP_ID }}
           APP_SECRET: ${{ secrets.APP_SECRET }}
-          CAPTION: ${{ secrets.REEL_CAPTION || 'Quranic verse of the day 📖✨ #Quran #Islam #Dua' }}
+          CAPTION: ${{ secrets.REEL_CAPTION }}
           MAX_POLL_SECONDS: '1500'
           POLL_INTERVAL: '10'
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
