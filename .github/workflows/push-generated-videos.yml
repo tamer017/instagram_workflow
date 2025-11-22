@@ -47,17 +47,15 @@ jobs:
 
       - name: Get available groups
         id: get-groups
-        shell: bash
         run: |
-          python3 > /tmp/get_group.py << 'PYTHON_EOF'
+          python3 -c "
 import json
 data = json.load(open('quran_groups/reciter_1_AbdulBaset_AbdulSamad_groups.json'))
 groups = data.get('groups', {})
 first_group = list(groups.keys())[0] if groups else 'reciter1_s001_001-007'
-print(f"group={first_group}")
-PYTHON_EOF
-          python3 /tmp/get_group.py >> $GITHUB_OUTPUT
-          echo "Selected group from workflow output"
+print(f'group={first_group}')
+" >> $GITHUB_OUTPUT
+          echo "Group extraction completed"
 
       - name: Generate Quranic videos
         run: |
