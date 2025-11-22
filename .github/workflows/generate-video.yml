@@ -1,239 +1,72 @@
-name: Generate and Publish Quran Video
+name: Generate and Push Quranic Videos
 
 on:
+  workflow_dispatch:
   schedule:
-    # Run every 15 minutes
-    - cron: '*/15 * * * *'
-  workflow_dispatch:  # Allow manual trigger
+    - cron: '0 * * * *'  # Every hour
 
 permissions:
-  contents: write  # Required for GitHub Pages deployment
+  contents: write
 
 jobs:
-  generate-video:
+  generate-videos:
     runs-on: ubuntu-latest
-    
+
     steps:
-      - name: Checkout repository
+      - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v4
         with:
-          python-version: '3.10'
-          cache: 'pip'
+          python-version: '3.11'
 
       - name: Install FFmpeg
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg
-          ffmpeg -version
-
-      - name: Install required fonts
-        run: |
-          sudo apt-get install -y fontconfig fonts-dejavu-core fonts-liberation fonts-noto
-          # Create fonts directory and copy system fonts
-          mkdir -p ~/.fonts
-          # For Arabic support
-          sudo apt-get install -y fonts-noto-core fonts-noto-ui-core fonts-noto-extra
-          fc-cache -fv
 
       - name: Install Python dependencies
         run: |
-          pip install --upgrade pip
+          python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install instagrapi
 
-      - name: Select next group to publish (sequential)
-        id: select_group
+      - name: Generate Quranic video
         run: |
-          # Get the next unpublished group in order
-          GROUP_ID=$(python3 group_tracker.py 2>&1 | grep "Next group to publish:" | cut -d' ' -f5)
-          
-          if [ -z "$GROUP_ID" ]; then
-            echo "No group found, trying to get next group..."
-            GROUP_ID=$(python3 -c "from group_tracker import get_next_group; print(get_next_group() or '')")
-          fi
-          
-          if [ -z "$GROUP_ID" ]; then
-            echo "ERROR: No group available to publish!"
-            exit 1
-          fi
-          
-          echo "Selected group: $GROUP_ID"
-          echo "GROUP_ID=$GROUP_ID" >> $GITHUB_OUTPUT
+          python generate_simple_video.py --group reciter1_s001_001-007
 
-      - name: Generate video
-        id: generate
+      - name: Check if video was generated
+        id: check-video
         run: |
-          # Run the video generation script with dynamic Arabic and English text overlays
-          python generate_simple_video.py --group ${{ steps.select_group.outputs.GROUP_ID }}
-          
-          # Find the generated video
-          VIDEO_FILE=$(ls -t generated_videos/*.mp4 | head -n 1)
-          echo "Generated video: $VIDEO_FILE"
-          echo "VIDEO_FILE=$VIDEO_FILE" >> $GITHUB_OUTPUT
-          
-          # Get video info
-          if [ -f "$VIDEO_FILE" ]; then
-            VIDEO_SIZE=$(du -h "$VIDEO_FILE" | cut -f1)
-            echo "Video size: $VIDEO_SIZE"
-            echo "VIDEO_SIZE=$VIDEO_SIZE" >> $GITHUB_OUTPUT
-            echo "SUCCESS=true" >> $GITHUB_OUTPUT
+          if [ -f "generated_videos/reciter1_s001_001-007.mp4" ]; then
+            echo "video_exists=true" >> $GITHUB_OUTPUT
+            ls -lh generated_videos/*.mp4
           else
-            echo "SUCCESS=false" >> $GITHUB_OUTPUT
+            echo "video_exists=false" >> $GITHUB_OUTPUT
+            echo "No video generated"
           fi
 
-      - name: Upload video as artifact
-        if: steps.generate.outputs.SUCCESS == 'true'
+      - name: Configure Git
+        if: steps.check-video.outputs.video_exists == 'true'
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+
+      - name: Add and commit videos
+        if: steps.check-video.outputs.video_exists == 'true'
+        run: |
+          git add generated_videos/*.mp4 2>/dev/null || true
+          git commit -m "Add generated Quranic videos $(date +'%Y-%m-%d %H:%M:%S')" || echo "No changes to commit"
+
+      - name: Push to repository
+        if: steps.check-video.outputs.video_exists == 'true'
+        run: |
+          git push origin main || echo "Nothing to push"
+
+      - name: Upload artifacts on failure
+        if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: generated-video
-          path: ${{ steps.generate.outputs.VIDEO_FILE }}
-          retention-days: 7
-
-      - name: Deploy video to GitHub Pages
-        if: steps.generate.outputs.SUCCESS == 'true'
-        run: |
-          # Create directory for GitHub Pages
-          mkdir -p gh-pages-content
-          
-          # Copy video to GitHub Pages directory
-          cp "${{ steps.generate.outputs.VIDEO_FILE }}" gh-pages-content/quran-video.mp4
-          
-          echo "📄 Video prepared for GitHub Pages"
-
-      - name: Deploy to GitHub Pages
-        if: steps.generate.outputs.SUCCESS == 'true'
-        uses: peaceiris/actions-gh-pages@v3
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./gh-pages-content
-          publish_branch: gh-pages
-          force_orphan: true
-          user_name: 'github-actions[bot]'
-          user_email: 'github-actions[bot]@users.noreply.github.com'
-      
-      - name: Wait for GitHub Pages deployment
-        if: steps.generate.outputs.SUCCESS == 'true'
-        run: |
-          echo "⏳ Waiting 30 seconds for GitHub Pages to deploy..."
-          sleep 30
-      
-      - name: Verify video URL is accessible
-        if: steps.generate.outputs.SUCCESS == 'true'
-        id: verify_url
-        run: |
-          VIDEO_URL="https://tamer017.github.io/instagram_workflow/quran-video.mp4"
-          echo "🔍 Verifying URL: $VIDEO_URL"
-          
-          MAX_RETRIES=10
-          RETRY_DELAY=5
-          
-          for i in $(seq 1 $MAX_RETRIES); do
-            echo "Attempt $i/$MAX_RETRIES..."
-            
-            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -I "$VIDEO_URL")
-            CONTENT_TYPE=$(curl -s -I "$VIDEO_URL" | grep -i "content-type:" | cut -d' ' -f2- | tr -d '\r\n')
-            
-            echo "  HTTP Code: $HTTP_CODE"
-            echo "  Content-Type: $CONTENT_TYPE"
-            
-            if [ "$HTTP_CODE" = "200" ] && echo "$CONTENT_TYPE" | grep -q "video/"; then
-              echo "✅ Video URL is accessible!"
-              echo "VIDEO_URL=$VIDEO_URL" >> $GITHUB_OUTPUT
-              exit 0
-            fi
-            
-            if [ $i -lt $MAX_RETRIES ]; then
-              echo "⏳ Not ready yet, waiting ${RETRY_DELAY}s..."
-              sleep $RETRY_DELAY
-            fi
-          done
-          
-          echo "❌ ERROR: Video URL not accessible after $MAX_RETRIES attempts"
-          echo "Please enable GitHub Pages: Settings → Pages → Source: gh-pages branch"
-          exit 1
-
-      - name: Publish to Instagram
-        if: steps.generate.outputs.SUCCESS == 'true'
-        env:
-          # Support both methods - workflow will auto-detect
-          INSTAGRAM_USERNAME: ${{ secrets.INSTAGRAM_USERNAME }}
-          INSTAGRAM_PASSWORD: ${{ secrets.INSTAGRAM_PASSWORD }}
-          IG_USER_ID: ${{ secrets.IG_USER_ID }}
-          LONG_LIVED_TOKEN: ${{ secrets.LONG_LIVED_TOKEN }}
-          APP_ID: ${{ secrets.APP_ID }}
-          APP_SECRET: ${{ secrets.APP_SECRET }}
-        run: |
-          # Generate proper caption with Arabic and English info
-          python generate_caption.py "${{ steps.select_group.outputs.GROUP_ID }}"
-          CAPTION=$(cat caption.txt)
-          echo "📝 Generated caption:"
-          echo "$CAPTION"
-          
-          # Export caption for use in publish scripts
-          export CAPTION="$CAPTION"
-          
-          # Check which credentials are available
-          if [ -n "$INSTAGRAM_USERNAME" ] && [ -n "$INSTAGRAM_PASSWORD" ]; then
-            echo "🔑 Using instagrapi (Personal Account)"
-            python publish_reel_instagrapi.py --video "${{ steps.generate.outputs.VIDEO_FILE }}" --caption "$CAPTION"
-            
-          elif [ -n "$IG_USER_ID" ] && [ -n "$LONG_LIVED_TOKEN" ]; then
-            echo "🔑 Using Graph API (Business Account)"
-            echo "� Publishing via Graph API with GitHub Pages URL..."
-            
-            # Use the verified GitHub Pages URL
-            VIDEO_URL="${{ steps.verify_url.outputs.VIDEO_URL }}"
-            echo "Video URL: $VIDEO_URL"
-            
-            # Publish to Instagram using Graph API
-            python publish_reel.py "$VIDEO_URL"
-            
-          else
-            echo "❌ No Instagram credentials found"
-            echo "Add one of these to repository secrets:"
-            echo "  Option 1 (Personal): INSTAGRAM_USERNAME + INSTAGRAM_PASSWORD"
-            echo "  Option 2 (Business): IG_USER_ID + LONG_LIVED_TOKEN"
-            exit 1
-          fi
-
-      - name: Mark group as published
-        if: steps.generate.outputs.SUCCESS == 'true'
-        run: |
-          # Mark the group as successfully published
-          python3 -c "from group_tracker import mark_group_published; mark_group_published('${{ steps.select_group.outputs.GROUP_ID }}', True)"
-          
-          # Show progress
-          python3 -c "from group_tracker import get_progress; p = get_progress(); print(f'Progress: {p[\"published\"]}/{p[\"total\"]} ({p[\"percentage\"]:.1f}%)')"
-
-      - name: Commit tracking file
-        if: steps.generate.outputs.SUCCESS == 'true'
-        run: |
-          git config --local user.email "github-actions[bot]@users.noreply.github.com"
-          git config --local user.name "github-actions[bot]"
-          git add published_groups.json
-          git commit -m "Track published group: ${{ steps.select_group.outputs.GROUP_ID }}" || echo "No changes to commit"
-          git push || echo "No changes to push"
-
-      - name: Create summary
-        if: always()
-        run: |
-          echo "## Video Generation Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- **Group ID**: ${{ steps.select_group.outputs.GROUP_ID }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Status**: ${{ steps.generate.outputs.SUCCESS == 'true' && '✅ Success' || '❌ Failed' }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Video Size**: ${{ steps.generate.outputs.VIDEO_SIZE }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Video File**: ${{ steps.generate.outputs.VIDEO_FILE }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Workflow completed at $(date)" >> $GITHUB_STEP_SUMMARY
-
-      - name: Clean up temporary files
-        if: always()
-        run: |
-          # Clean up temp directories
-          rm -rf temp_audio_downloads/*
-          echo "Cleanup completed"
+          name: debug-logs
+          path: generated_videos/
+          retention-days: 3
