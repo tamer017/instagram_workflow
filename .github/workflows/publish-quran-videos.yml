@@ -1,1 +1,253 @@
-kubectl apply -f /path/to/generated_videos/publish-quran-videos.yml
+name: Publish Quran Videos to Instagram
+
+on:
+  schedule:
+    - cron: '0 * * * *'  # Every hour
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish-next-video:
+    runs-on: ubuntu-latest
+    name: Publish Next Quran Video Group
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install FFmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Get next group to publish
+        id: get-group
+        run: |
+          python3 << 'PYTHON_EOF'
+import json
+import os
+
+# Load reciter 1 groups
+with open('quran_groups/reciter_1_AbdulBaset_AbdulSamad_groups.json', 'r', encoding='utf-8') as f:
+    data = json.load(f)
+    groups = data['groups']
+
+# Load published tracker
+tracker_file = 'approved_videos.json'
+published_groups = []
+if os.path.exists(tracker_file):
+    try:
+        with open(tracker_file, 'r', encoding='utf-8') as f:
+            tracker = json.load(f)
+            published_groups = tracker.get('published_groups', [])
+    except:
+        pass
+
+# Find next unpublished group
+next_group = None
+for group in groups:
+    group_id = group['group_id']
+    if group_id not in published_groups:
+        next_group = group
+        break
+
+# If all published, restart from beginning
+if not next_group and len(groups) > 0:
+    print("All groups published! Restarting from beginning...")
+    next_group = groups[0]
+    # Clear published list to restart
+    published_groups = []
+
+if next_group:
+    print(f"Next group: {next_group['group_id']}")
+    with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+        f.write(f"group_id={next_group['group_id']}\n")
+        f.write(f"has_group=true\n")
+        f.write(f"restart={'true' if len(published_groups) == 0 else 'false'}\n")
+else:
+    print("No groups available!")
+    with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+        f.write(f"has_group=false\n")
+PYTHON_EOF
+
+      - name: Generate video for group
+        if: steps.get-group.outputs.has_group == 'true'
+        run: |
+          python generate_simple_video.py --group ${{ steps.get-group.outputs.group_id }}
+
+      - name: Upload to Instagram
+        if: steps.get-group.outputs.has_group == 'true'
+        env:
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+          LONG_LIVED_TOKEN: ${{ secrets.LONG_LIVED_TOKEN }}
+          GROUP_ID: ${{ steps.get-group.outputs.group_id }}
+        run: |
+          python3 << 'PYTHON_EOF'
+import os
+import requests
+import json
+import time
+
+IG_USER_ID = os.environ.get("IG_USER_ID")
+LONG_LIVED_TOKEN = os.environ.get("LONG_LIVED_TOKEN")
+GROUP_ID = os.environ.get("GROUP_ID")
+VIDEO_PATH = f"generated_videos/{GROUP_ID}.mp4"
+
+if not IG_USER_ID or not LONG_LIVED_TOKEN:
+    print("❌ Missing IG_USER_ID or LONG_LIVED_TOKEN")
+    print("Please add secrets in GitHub Settings → Secrets and variables → Actions")
+    exit(1)
+
+if not os.path.exists(VIDEO_PATH):
+    print(f"❌ Video file not found: {VIDEO_PATH}")
+    exit(1)
+
+print(f"📱 Posting Quranic video to Instagram")
+print(f"📹 Video: {VIDEO_PATH}")
+
+# Step 1: Create media container
+print("⬆️ Creating media container...")
+container_url = f"https://graph.facebook.com/v21.0/{IG_USER_ID}/media"
+
+# Get video file size
+video_size = os.path.getsize(VIDEO_PATH)
+print(f"Video size: {video_size / (1024*1024):.2f} MB")
+
+container_params = {
+    'media_type': 'REELS',
+    'video_url': f'https://raw.githubusercontent.com/tamer017/instagram_workflow/main/{VIDEO_PATH}',
+    'caption': '🕌 Quranic Recitation | القرآن الكريم\n📖 Reciter: Abdul Basit Abdul Samad\n✨ ' + GROUP_ID + '\n\n#Quran #Islam #QuranRecitation #IslamicContent #MuslimCommunity #HolyQuran #القرآن #تلاوة',
+    'access_token': LONG_LIVED_TOKEN
+}
+
+response = requests.post(container_url, data=container_params)
+print(f"Container Status: {response.status_code}")
+
+if response.status_code != 200:
+    print(f"Error: {response.text}")
+    exit(1)
+
+container_id = response.json().get("id")
+print(f"✅ Media container created: {container_id}")
+
+# Step 2: Wait for video to be processed
+print("⏳ Waiting for video processing...")
+max_wait = 60
+waited = 0
+while waited < max_wait:
+    status_url = f"https://graph.facebook.com/v21.0/{container_id}"
+    status_params = {'fields': 'status_code', 'access_token': LONG_LIVED_TOKEN}
+    status_response = requests.get(status_url, params=status_params)
+    
+    if status_response.status_code == 200:
+        status_code = status_response.json().get('status_code')
+        print(f"Status: {status_code}")
+        if status_code == 'FINISHED':
+            break
+        elif status_code == 'ERROR':
+            print("❌ Video processing failed")
+            exit(1)
+    
+    time.sleep(5)
+    waited += 5
+
+# Step 3: Publish the video
+print("📤 Publishing to Instagram...")
+publish_url = f"https://graph.facebook.com/v21.0/{IG_USER_ID}/media_publish"
+publish_params = {
+    'creation_id': container_id,
+    'access_token': LONG_LIVED_TOKEN
+}
+
+publish_response = requests.post(publish_url, data=publish_params)
+print(f"Publish Status: {publish_response.status_code}")
+
+if publish_response.status_code == 200:
+    post_id = publish_response.json().get("id")
+    print(f"✅ Quranic video posted successfully!")
+    print(f"📱 Post ID: {post_id}")
+else:
+    print(f"Error: {publish_response.text}")
+    exit(1)
+PYTHON_EOF
+
+      - name: Mark group as published
+        if: steps.get-group.outputs.has_group == 'true'
+        run: |
+          python3 << 'PYTHON_EOF'
+import json
+import os
+
+tracker_file = 'approved_videos.json'
+group_id = os.environ.get('GROUP_ID')
+restart = os.environ.get('RESTART') == 'true'
+
+# Load or create tracker
+tracker = {'published_groups': []}
+if os.path.exists(tracker_file) and not restart:
+    try:
+        with open(tracker_file, 'r', encoding='utf-8') as f:
+            tracker = json.load(f)
+    except:
+        pass
+
+# If restarting, clear the list
+if restart:
+    print("🔄 Restarting cycle - clearing published list")
+    tracker['published_groups'] = []
+
+# Add group to published list
+if 'published_groups' not in tracker:
+    tracker['published_groups'] = []
+
+if group_id not in tracker['published_groups']:
+    tracker['published_groups'].append(group_id)
+
+# Save tracker
+with open(tracker_file, 'w', encoding='utf-8') as f:
+    json.dump(tracker, f, indent=2, ensure_ascii=False)
+
+print(f"✅ Marked {group_id} as published")
+print(f"Total published: {len(tracker['published_groups'])}")
+PYTHON_EOF
+        env:
+          GROUP_ID: ${{ steps.get-group.outputs.group_id }}
+          RESTART: ${{ steps.get-group.outputs.restart }}
+
+      - name: Commit tracker update
+        if: steps.get-group.outputs.has_group == 'true'
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add approved_videos.json
+          if [ "${{ steps.get-group.outputs.restart }}" == "true" ]; then
+            git commit -m "🔄 Restart cycle - Track published group: ${{ steps.get-group.outputs.group_id }}"
+          else
+            git commit -m "Track published group: ${{ steps.get-group.outputs.group_id }}"
+          fi
+          git push origin main
+
+      - name: All groups published
+        if: steps.get-group.outputs.has_group == 'false'
+        run: |
+          echo "⚠️ No groups available to publish"
+
+      - name: Upload artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-logs-${{ steps.get-group.outputs.group_id }}
+          path: generated_videos/
+          retention-days: 3
