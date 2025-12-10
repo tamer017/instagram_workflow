@@ -188,16 +188,15 @@ jobs:
               ayah_range_ar = f"الآيات {ayah_start}-{ayah_end}"
               ayah_range_en = f"Verses {ayah_start}-{ayah_end}"
           
-          caption = f"""🕌 القرآن الكريم
-📖 سورة {surah_arabic} • {ayah_range_ar}
-
-🕌 Holy Quran
-📖 Surah {surah_english} • {ayah_range_en}
-
-🎙️ القارئ: عبد الباسط عبد الصمد
-🎙️ Reciter: Abdul Basit Abdul Samad
-
-#Quran #QuranRecitation #Islam #القرآن #تلاوة #اسلام #{surah_english.replace('-', '').replace(' ', '')}"""
+          surah_hashtag = surah_english.replace('-', '').replace(' ', '')
+          
+          caption = f"🕌 القرآن الكريم\n"
+          caption += f"📖 سورة {surah_arabic} • {ayah_range_ar}\n\n"
+          caption += f"🕌 Holy Quran\n"
+          caption += f"📖 Surah {surah_english} • {ayah_range_en}\n\n"
+          caption += f"🎙️ القارئ: عبد الباسط عبد الصمد\n"
+          caption += f"🎙️ Reciter: Abdul Basit Abdul Samad\n\n"
+          caption += f"#Quran #QuranRecitation #Islam #القرآن #تلاوة #اسلام #{surah_hashtag}"
           
           # GitHub Pages URL
           VIDEO_URL = f"https://tamer017.github.io/instagram_workflow/videos/{GROUP_ID}.mp4"
