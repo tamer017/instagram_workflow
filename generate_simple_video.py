@@ -333,9 +333,10 @@ def render_arabic_text_image(
         Path to generated PNG image
     """
     try:
-        # Shape the Arabic text properly for display
-        # Use arabic_reshaper and bidi for proper RTL rendering
+        # Use arabic_reshaper for connected letters (presentation forms)
+        # Arial/Tahoma support these forms well
         reshaped = arabic_reshaper.reshape(text)
+        # get_display() handles bidi algorithm to reverse for RTL
         bidi_text = get_display(reshaped)
         
         # Load font - try multiple options
@@ -344,20 +345,22 @@ def render_arabic_text_image(
         tried_fonts = []
         
         # List of fonts to try in order
+        # Arial has best connected letters with presentation forms
         font_candidates = [
-            font_path,
+            "C:/Windows/Fonts/arial.ttf",   # Best for connected letters
+            "C:/Windows/Fonts/tahoma.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",  # Linux
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+            "fonts/AmiriQuran.ttf",
             "fonts/ScheherazadeNew-Regular.ttf",
-            "fonts/AmiriQuran-Regular.ttf",
             "fonts/NotoNaskhArabic-Regular.ttf",
+            font_path,
             "fonts/Lateef-Regular.ttf",
             "fonts/UthmanicHafs_v20.otf",
-            "C:/Windows/Fonts/tahoma.ttf",
-            "C:/Windows/Fonts/arial.ttf",
             "/usr/share/fonts/truetype/Scheherazade/Scheherazade-Regular.ttf",
             "/usr/share/fonts/opentype/Scheherazade/Scheherazade-Regular.ttf",
             "/usr/share/fonts/truetype/noto/NotoNaskhArabic-Regular.ttf",
             "/usr/share/fonts/truetype/noto/NotoSansArabic-Regular.ttf",
-            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
         ]
         
         for font_candidate in font_candidates:
@@ -384,75 +387,121 @@ def render_arabic_text_image(
         temp_img = Image.new('RGBA', (1, 1), (0, 0, 0, 0))
         draw = ImageDraw.Draw(temp_img)
         
-        # Get text bounding box
+        # Check if text needs to be split into multiple lines
         bbox = draw.textbbox((0, 0), bidi_text, font=font)
         text_width = bbox[2] - bbox[0]
         text_height = bbox[3] - bbox[1]
         
+        lines = [bidi_text]
+        
+        # If text is too wide, split into multiple lines
+        if text_width > max_width and loaded_font_path:
+            # Split text by words (spaces)
+            words = bidi_text.split()
+            lines = []
+            current_line = []
+            
+            for word in words:
+                test_line = ' '.join(current_line + [word])
+                test_bbox = draw.textbbox((0, 0), test_line, font=font)
+                test_width = test_bbox[2] - test_bbox[0]
+                
+                if test_width <= max_width:
+                    current_line.append(word)
+                else:
+                    if current_line:
+                        lines.append(' '.join(current_line))
+                        current_line = [word]
+                    else:
+                        # Single word is too long, add it anyway
+                        lines.append(word)
+            
+            if current_line:
+                lines.append(' '.join(current_line))
+            
+            print(f"  📝 Split text into {len(lines)} lines to fit width {max_width}px")
+        
+        # Calculate total dimensions
+        line_heights = []
+        max_line_width = 0
+        
+        for line in lines:
+            bbox = draw.textbbox((0, 0), line, font=font)
+            line_width = bbox[2] - bbox[0]
+            line_height = bbox[3] - bbox[1]
+            line_heights.append(line_height)
+            max_line_width = max(max_line_width, line_width)
+        
         # Add padding for border, shadow, and tashkeel marks
         padding = max(30, border_width * 4)  # Extra padding for tashkeel
+        line_spacing = 10  # Space between lines
         
-        # Scale down font if text is too wide
-        original_font_size = font_size
-        while text_width > max_width and font_size > 20 and loaded_font_path:
-            font_size = int(font_size * 0.9)
-            font = ImageFont.truetype(loaded_font_path, font_size)
-            bbox = draw.textbbox((0, 0), bidi_text, font=font)
-            text_width = bbox[2] - bbox[0]
-            text_height = bbox[3] - bbox[1]
-        
-        if font_size != original_font_size:
-            print(f"  ⚠️  Text scaled down from {original_font_size}px to {font_size}px to fit width {max_width}px")
-        
-        img_width = min(text_width + padding * 2, max_width + padding * 2)
-        img_height = text_height + padding * 2
+        total_height = sum(line_heights) + line_spacing * max(0, len(lines) - 1)
+        img_width = min(max_line_width + padding * 2, max_width + padding * 2)
+        img_height = total_height + padding * 2
         
         # Create final image with transparent background
         img = Image.new('RGBA', (img_width, img_height), (0, 0, 0, 0))
         draw = ImageDraw.Draw(img)
         
-        # Calculate text position (centered)
-        x = (img_width - text_width) // 2
-        y = padding
+        # Create final image with transparent background
+        img = Image.new('RGBA', (img_width, img_height), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(img)
         
-        # Draw shadow if requested
-        if add_shadow:
-            shadow_offset = 3
-            shadow_color = (0, 0, 0, 200)
+        # Draw each line
+        current_y = padding
+        
+        for i, line in enumerate(lines):
+            # Get line dimensions
+            bbox = draw.textbbox((0, 0), line, font=font)
+            line_width = bbox[2] - bbox[0]
+            line_height = line_heights[i]
+            
+            # Center line horizontally
+            x = (img_width - line_width) // 2
+            y = current_y
+            
+            # Draw shadow if requested
+            if add_shadow:
+                shadow_offset = 3
+                shadow_color = (0, 0, 0, 200)
+                try:
+                    draw.text((x + shadow_offset, y + shadow_offset), line, font=font, fill=shadow_color)
+                except OSError as e:
+                    if "Bitmap missing for glyph" in str(e):
+                        print(f"⚠️  Shadow rendering failed (missing glyphs): {line[:30]}...")
+                    else:
+                        raise
+            
+            # Draw border/stroke for better readability
+            if border_width > 0:
+                border_color = (0, 0, 0, 255)
+                for adj_x in range(-border_width, border_width + 1):
+                    for adj_y in range(-border_width, border_width + 1):
+                        if adj_x != 0 or adj_y != 0:
+                            try:
+                                draw.text((x + adj_x, y + adj_y), line, font=font, fill=border_color)
+                            except OSError as e:
+                                if "Bitmap missing for glyph" in str(e):
+                                    print(f"⚠️  Border rendering failed (missing glyphs): {line[:30]}...")
+                                    break
+                                else:
+                                    raise
+            
+            # Draw main text
             try:
-                draw.text((x + shadow_offset, y + shadow_offset), bidi_text, font=font, fill=shadow_color)
+                draw.text((x, y), line, font=font, fill=color)
             except OSError as e:
                 if "Bitmap missing for glyph" in str(e):
-                    print(f"⚠️  Shadow rendering failed (missing glyphs): {text[:30]}...")
+                    print(f"⚠️  Text rendering failed (missing glyphs): {line[:30]}...")
+                    print(f"⚠️  Font {Path(font_path).name} doesn't support all required characters.")
+                    print(f"⚠️  Please ensure you're using UthmanTN1 or another Quranic font.")
+                    return None
                 else:
                     raise
-        
-        # Draw border/stroke for better readability
-        if border_width > 0:
-            border_color = (0, 0, 0, 255)
-            for adj_x in range(-border_width, border_width + 1):
-                for adj_y in range(-border_width, border_width + 1):
-                    if adj_x != 0 or adj_y != 0:
-                        try:
-                            draw.text((x + adj_x, y + adj_y), bidi_text, font=font, fill=border_color)
-                        except OSError as e:
-                            if "Bitmap missing for glyph" in str(e):
-                                print(f"⚠️  Border rendering failed (missing glyphs): {text[:30]}...")
-                                break
-                            else:
-                                raise
-        
-        # Draw main text
-        try:
-            draw.text((x, y), bidi_text, font=font, fill=color)
-        except OSError as e:
-            if "Bitmap missing for glyph" in str(e):
-                print(f"⚠️  Text rendering failed (missing glyphs): {text[:30]}...")
-                print(f"⚠️  Font {Path(font_path).name} doesn't support all required characters.")
-                print(f"⚠️  Please ensure you're using UthmanTN1 or another Quranic font.")
-                return None
-            else:
-                raise
+            
+            # Move to next line
+            current_y += line_height + line_spacing
         
         # Save to temporary file
         temp_dir = Path("temp_text_overlays")
