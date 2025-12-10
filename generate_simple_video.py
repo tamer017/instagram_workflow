@@ -204,74 +204,37 @@ def download_quranic_font() -> Optional[str]:
 
 
 def get_available_font():
-    """Return the path of the first available Quranic font in priority order."""
+    """Return Arial font path (forced for best connected Arabic letter rendering)."""
     
-    # Define preferred font order - Tajweed fonts first for color-coded recitation
-    FONT_CANDIDATES = [
-        ("KFGQPC Hafs Uthmanic Script (Tajweed)", "UthmanicHafs_v20.otf"),
-        ("Scheherazade New", "ScheherazadeNew-Regular.ttf"),
-        ("Amiri Quran", "AmiriQuran-Regular.ttf"),
-        ("Noto Naskh Arabic", "NotoNaskhArabic-Regular.ttf"),
-        ("Lateef", "Lateef-Regular.ttf"),
-    ]
+    print("🔍 Looking for Arial font...")
     
-    fonts_dir = Path("fonts")
-    
-    print("🔍 Looking for Quranic fonts...")
-    
-    # Check for available fonts in priority order
-    for font_name, filename in FONT_CANDIDATES:
-        font_path = fonts_dir / filename
-        if font_path.exists() and font_path.stat().st_size > 10000:
-            print(f"✓ Using font: {font_path} ({font_name})")
-            return str(font_path)
-    
-    # If no fonts found, try to download
-    print("⚠️  No Quranic fonts found locally. Attempting to download...")
-    try:
-        font_path = download_quranic_font()
-        if font_path:
-            return font_path.replace("\\", "/")
-    except FileNotFoundError as e:
-        print(str(e))
-        print("\n⚠️  Falling back to system fonts (may not display Arabic correctly)...")
-    except Exception as e:
-        print(f"⚠️  Error loading Quranic font: {e}")
-        print("⚠️  Falling back to system fonts...")
-    
-    # Fall back to system fonts as last resort
+    # Force Arial font only - best for connected letters with arabic_reshaper
     import platform
     system = platform.system()
+    
     if system == "Windows":
-        possible_fonts = [
-            "C:/Windows/Fonts/tahoma.ttf",
+        arial_paths = [
             "C:/Windows/Fonts/arial.ttf",
+            "C:/Windows/Fonts/Arial.ttf",
         ]
     elif system == "Linux":
-        # Linux system Arabic fonts
-        possible_fonts = [
-            "/usr/share/fonts/truetype/noto/NotoNaskhArabic-Regular.ttf",
-            "/usr/share/fonts/truetype/noto/NotoSansArabic-Regular.ttf",
-            # Scheherazade from fonts-sil-scheherazade package
-            "/usr/share/fonts/truetype/Scheherazade/Scheherazade-Regular.ttf",
-            "/usr/share/fonts/opentype/Scheherazade/Scheherazade-Regular.ttf",
-            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
-            "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+        arial_paths = [
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",  # Arial equivalent
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",  # Fallback
         ]
     else:  # macOS
-        possible_fonts = [
-            "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
-            "/Library/Fonts/Arial Unicode.ttf",
+        arial_paths = [
             "/Library/Fonts/Arial.ttf",
+            "/System/Library/Fonts/Supplemental/Arial.ttf",
         ]
     
-    for font in possible_fonts:
+    for font in arial_paths:
         if Path(font).exists():
-            print(f"✓ Using system font: {font}")
+            print(f"✓ Using font: {font} (Arial - optimized for connected Arabic)")
             return font
     
     # Last resort
-    print("⚠️  No fonts found! Text may not display correctly.")
+    print("⚠️  Arial not found! Using default font.")
     return "arial.ttf"
 
 
