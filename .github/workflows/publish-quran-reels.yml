@@ -74,63 +74,84 @@ jobs:
         run: |
           python generate_simple_video.py --group ${{ steps.next-group.outputs.group_id }}
 
-      - name: Upload video as artifact and get URL
-        id: upload-video
-        uses: actions/upload-artifact@v4
-        with:
-          name: video-${{ steps.next-group.outputs.group_id }}
-          path: generated_videos/${{ steps.next-group.outputs.group_id }}.mp4
-          retention-days: 1
+      - name: Deploy video to GitHub Pages
+        run: |
+          # Create/update gh-pages branch
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          
+          # Create videos directory in gh-pages
+          mkdir -p gh-pages-videos
+          cp generated_videos/${{ steps.next-group.outputs.group_id }}.mp4 gh-pages-videos/
+          
+          # Switch to gh-pages branch (create if doesn't exist)
+          git fetch origin gh-pages || git checkout --orphan gh-pages
+          git checkout gh-pages || git checkout --orphan gh-pages
+          
+          # Remove all files except videos
+          git rm -rf . 2>/dev/null || true
+          
+          # Copy video
+          mkdir -p videos
+          cp ../gh-pages-videos/${{ steps.next-group.outputs.group_id }}.mp4 videos/
+          
+          # Create index.html
+          cat > index.html << 'HTML'
+          <!DOCTYPE html>
+          <html>
+          <head><title>Quran Videos</title></head>
+          <body><h1>Quran Video Hosting</h1></body>
+          </html>
+          HTML
+          
+          # Commit and push
+          git add .
+          git commit -m "Add video: ${{ steps.next-group.outputs.group_id }}"
+          git push -f origin gh-pages
+          
+          # Return to main branch
+          git checkout main
+
+      - name: Wait for GitHub Pages to deploy
+        run: |
+          echo "Waiting for GitHub Pages deployment..."
+          sleep 30
 
       - name: Post to Instagram
         env:
           IG_USER_ID: ${{ secrets.IG_USER_ID }}
           LONG_LIVED_TOKEN: ${{ secrets.LONG_LIVED_TOKEN }}
           GROUP_ID: ${{ steps.next-group.outputs.group_id }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           python3 << 'PYTHON_EOF'
           import os
           import requests
           import time
-          import base64
           
           IG_USER_ID = os.environ['IG_USER_ID']
           TOKEN = os.environ['LONG_LIVED_TOKEN']
           GROUP_ID = os.environ['GROUP_ID']
-          VIDEO = f"generated_videos/{GROUP_ID}.mp4"
           
-          if not os.path.exists(VIDEO):
-              print(f"❌ Video not found: {VIDEO}")
-              exit(1)
+          # GitHub Pages URL
+          VIDEO_URL = f"https://tamer017.github.io/instagram_workflow/videos/{GROUP_ID}.mp4"
           
           print(f"📱 Posting {GROUP_ID}")
+          print(f"🔗 Video URL: {VIDEO_URL}")
           
-          # Read video file as binary
-          with open(VIDEO, 'rb') as f:
-              video_data = f.read()
-          
-          print(f"Video size: {len(video_data) / (1024*1024):.2f} MB")
-          
-          # Create container with video upload
+          # Create container
           url = f"https://graph.facebook.com/v21.0/{IG_USER_ID}/media"
-          
-          # Upload video directly
-          files = {
-              'video': (f'{GROUP_ID}.mp4', video_data, 'video/mp4')
-          }
-          
           data = {
               'media_type': 'REELS',
+              'video_url': VIDEO_URL,
               'caption': f'🕌 القرآن الكريم | Quran Recitation\n📖 Abdul Basit Abdul Samad\n✨ {GROUP_ID}\n\n#Quran #Islam #QuranRecitation #القرآن #تلاوة',
               'access_token': TOKEN
           }
           
-          print("⬆️ Uploading video to Instagram...")
-          r = requests.post(url, data=data, files=files, timeout=300)
+          print("⬆️ Creating media container...")
+          r = requests.post(url, data=data)
           
           if r.status_code != 200:
-              print(f"❌ Upload failed: {r.text}")
+              print(f"❌ Container creation failed: {r.text}")
               exit(1)
           
           container_id = r.json()['id']
@@ -138,7 +159,7 @@ jobs:
           
           # Wait for processing
           print("⏳ Waiting for video processing...")
-          max_wait = 120
+          max_wait = 180
           waited = 0
           
           while waited < max_wait:
@@ -148,17 +169,21 @@ jobs:
               
               if status_r.status_code == 200:
                   status = status_r.json().get('status_code', 'UNKNOWN')
-                  print(f"Status: {status}")
+                  print(f"Status: {status} (waited {waited}s)")
                   
                   if status == 'FINISHED':
                       print("✅ Processing complete")
                       break
                   elif status == 'ERROR':
                       print("❌ Processing failed")
+                      print(status_r.json())
                       exit(1)
               
               time.sleep(10)
               waited += 10
+          
+          if waited >= max_wait:
+              print("⚠️ Processing timeout, attempting publish anyway...")
           
           # Publish
           print("📤 Publishing to Instagram...")
