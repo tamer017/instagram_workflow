@@ -966,10 +966,12 @@ def create_simple_video(
         cmd.extend(input_args)
     
     # Add filter complex and output options
+    # Audio input index depends on whether we have a background video
+    audio_input_idx = '1:a' if bg_video_path else '0:a'
     cmd.extend([
         '-filter_complex', filter_complex,
         '-map', '[output]',
-        '-map', '1:a',  # Audio is always input [1]
+        '-map', audio_input_idx,
         # Video encoding with higher quality
         '-c:v', 'libx264',
         '-preset', 'slow',  # Slower preset = better quality
