@@ -340,6 +340,7 @@ def render_arabic_text_image(
         
         # Load font - try multiple options
         font = None
+        loaded_font_path = None
         tried_fonts = []
         
         # List of fonts to try in order
@@ -367,6 +368,7 @@ def render_arabic_text_image(
             try:
                 if Path(font_candidate).exists():
                     font = ImageFont.truetype(font_candidate, font_size)
+                    loaded_font_path = font_candidate
                     print(f"✓ Loaded font for rendering: {Path(font_candidate).name}")
                     break
             except Exception as e:
@@ -376,6 +378,7 @@ def render_arabic_text_image(
         if font is None:
             print("⚠️  All font loading attempts failed, using PIL default font")
             font = ImageFont.load_default()
+            loaded_font_path = None
         
         # Create a temporary image to measure text size
         temp_img = Image.new('RGBA', (1, 1), (0, 0, 0, 0))
@@ -388,6 +391,19 @@ def render_arabic_text_image(
         
         # Add padding for border, shadow, and tashkeel marks
         padding = max(30, border_width * 4)  # Extra padding for tashkeel
+        
+        # Scale down font if text is too wide
+        original_font_size = font_size
+        while text_width > max_width and font_size > 20 and loaded_font_path:
+            font_size = int(font_size * 0.9)
+            font = ImageFont.truetype(loaded_font_path, font_size)
+            bbox = draw.textbbox((0, 0), bidi_text, font=font)
+            text_width = bbox[2] - bbox[0]
+            text_height = bbox[3] - bbox[1]
+        
+        if font_size != original_font_size:
+            print(f"  ⚠️  Text scaled down from {original_font_size}px to {font_size}px to fit width {max_width}px")
+        
         img_width = min(text_width + padding * 2, max_width + padding * 2)
         img_height = text_height + padding * 2
         
