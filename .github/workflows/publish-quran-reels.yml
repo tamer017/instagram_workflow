@@ -79,7 +79,7 @@ jobs:
         run: |
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
-          git add generated_videos/${{ steps.next-group.outputs.group_id }}.mp4
+          git add -f generated_videos/${{ steps.next-group.outputs.group_id }}.mp4
           git commit -m "Add video: ${{ steps.next-group.outputs.group_id }}"
           
           # Push and wait for completion
