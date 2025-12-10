@@ -74,16 +74,37 @@ jobs:
         run: |
           python generate_simple_video.py --group ${{ steps.next-group.outputs.group_id }}
 
-      - name: Commit video to repository
+      - name: Commit and push video
+        id: commit-video
         run: |
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
           git add generated_videos/${{ steps.next-group.outputs.group_id }}.mp4
           git commit -m "Add video: ${{ steps.next-group.outputs.group_id }}"
+          
+          # Push and wait for completion
           git push origin main
-
-      - name: Wait for GitHub to update
-        run: sleep 10
+          
+          # Verify the file is accessible on GitHub
+          VIDEO_URL="https://raw.githubusercontent.com/tamer017/instagram_workflow/main/generated_videos/${{ steps.next-group.outputs.group_id }}.mp4"
+          echo "Waiting for GitHub to update..."
+          
+          for i in {1..30}; do
+            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$VIDEO_URL")
+            if [ "$HTTP_CODE" = "200" ]; then
+              echo "✅ Video accessible on GitHub (attempt $i)"
+              break
+            fi
+            echo "Waiting... (attempt $i/30, status: $HTTP_CODE)"
+            sleep 5
+          done
+          
+          # Final check
+          FINAL_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$VIDEO_URL")
+          if [ "$FINAL_CODE" != "200" ]; then
+            echo "❌ Video still not accessible after 150s"
+            exit 1
+          fi
 
       - name: Post to Instagram
         env:
