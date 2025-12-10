@@ -74,6 +74,17 @@ jobs:
         run: |
           python generate_simple_video.py --group ${{ steps.next-group.outputs.group_id }}
 
+      - name: Commit video to repository
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add generated_videos/${{ steps.next-group.outputs.group_id }}.mp4
+          git commit -m "Add video: ${{ steps.next-group.outputs.group_id }}"
+          git push origin main
+
+      - name: Wait for GitHub to update
+        run: sleep 10
+
       - name: Post to Instagram
         env:
           IG_USER_ID: ${{ secrets.IG_USER_ID }}
