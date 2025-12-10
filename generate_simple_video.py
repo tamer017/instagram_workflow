@@ -297,10 +297,11 @@ def render_arabic_text_image(
     """
     try:
         # Use arabic_reshaper for connected letters (presentation forms)
-        # Arial/Tahoma support these forms well
+        # Arial/Tahoma/Liberation Sans support these forms well
         reshaped = arabic_reshaper.reshape(text)
-        # get_display() handles bidi algorithm to reverse for RTL
-        bidi_text = get_display(reshaped)
+        # For PIL rendering, we need to reverse manually for RTL since PIL draws LTR
+        # get_display() reverses for RTL but also handles bidi - we just need simple reversal
+        bidi_text = reshaped[::-1]  # Simple RTL reversal for PIL
         
         # Load font - try multiple options
         font = None
