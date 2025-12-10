@@ -247,27 +247,32 @@ def get_available_font():
             "C:/Windows/Fonts/tahoma.ttf",
             "C:/Windows/Fonts/arial.ttf",
         ]
-        for font in possible_fonts:
-            if Path(font).exists():
-                print(f"✓ Using system font: {font}")
-                return font
-        return "C:/Windows/Fonts/arial.ttf"
     elif system == "Linux":
+        # Linux system Arabic fonts
         possible_fonts = [
+            "/usr/share/fonts/truetype/noto/NotoNaskhArabic-Regular.ttf",
+            "/usr/share/fonts/truetype/noto/NotoSansArabic-Regular.ttf",
+            # Scheherazade from fonts-sil-scheherazade package
+            "/usr/share/fonts/truetype/Scheherazade/Scheherazade-Regular.ttf",
+            "/usr/share/fonts/opentype/Scheherazade/Scheherazade-Regular.ttf",
             "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
             "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
-            "/usr/share/fonts/truetype/noto/NotoSans-Regular.ttf",
-            "/usr/share/fonts/dejavu/DejaVuSans.ttf"
         ]
-        for font in possible_fonts:
-            if Path(font).exists():
-                print(f"✓ Using system font: {font}")
-                return font
-        return "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
-    elif system == "Darwin":
-        return "/Library/Fonts/Arial.ttf"
-    else:
-        return "arial.ttf"
+    else:  # macOS
+        possible_fonts = [
+            "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+            "/Library/Fonts/Arial Unicode.ttf",
+            "/Library/Fonts/Arial.ttf",
+        ]
+    
+    for font in possible_fonts:
+        if Path(font).exists():
+            print(f"✓ Using system font: {font}")
+            return font
+    
+    # Last resort
+    print("⚠️  No fonts found! Text may not display correctly.")
+    return "arial.ttf"
 
 
 def get_font_path() -> str:

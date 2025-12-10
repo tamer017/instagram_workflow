@@ -31,6 +31,13 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+          
+          # Install additional Arabic font packages
+          sudo apt-get update
+          sudo apt-get install -y fonts-arabeyes fonts-farsiweb fonts-noto-nastaliq-urdu fonts-sil-scheherazade
+          
+          # List available Arabic fonts for debugging
+          fc-list :lang=ar | head -10
 
       - name: Get next group
         id: next-group
@@ -151,15 +158,53 @@ jobs:
           import os
           import requests
           import time
+          import json
           
           IG_USER_ID = os.environ['IG_USER_ID']
           TOKEN = os.environ['LONG_LIVED_TOKEN']
           GROUP_ID = os.environ['GROUP_ID']
           
+          # Load group data to get surah and ayah info
+          with open('quran_groups/reciter_1_AbdulBaset_AbdulSamad_groups.json', 'r', encoding='utf-8') as f:
+              groups_data = json.load(f)
+              group_info = groups_data['groups'][GROUP_ID]
+          
+          # Load surah names
+          with open('surah_names.json', 'r', encoding='utf-8') as f:
+              surah_names = json.load(f)['surahs']
+          
+          # Get surah info
+          surah_num = group_info['surah']
+          ayah_start = group_info['ayah_start']
+          ayah_end = group_info['ayah_end']
+          surah_arabic = surah_names[str(surah_num)]['arabic']
+          surah_english = surah_names[str(surah_num)]['english']
+          
+          # Build caption
+          if ayah_start == ayah_end:
+              ayah_range_ar = f"الآية {ayah_start}"
+              ayah_range_en = f"Verse {ayah_start}"
+          else:
+              ayah_range_ar = f"الآيات {ayah_start}-{ayah_end}"
+              ayah_range_en = f"Verses {ayah_start}-{ayah_end}"
+          
+          caption = f"""🕌 القرآن الكريم
+📖 سورة {surah_arabic} • {ayah_range_ar}
+
+🕌 Holy Quran
+📖 Surah {surah_english} • {ayah_range_en}
+
+🎙️ القارئ: عبد الباسط عبد الصمد
+🎙️ Reciter: Abdul Basit Abdul Samad
+
+#Quran #QuranRecitation #Islam #القرآن #تلاوة #اسلام #{surah_english.replace('-', '').replace(' ', '')}"""
+          
           # GitHub Pages URL
           VIDEO_URL = f"https://tamer017.github.io/instagram_workflow/videos/{GROUP_ID}.mp4"
           
           print(f"📱 Posting {GROUP_ID}")
+          print(f"📖 Surah: {surah_arabic} ({surah_english})")
+          print(f"📝 Ayahs: {ayah_start}-{ayah_end}")
           print(f"🔗 Video URL: {VIDEO_URL}")
           
           # Create container
@@ -167,7 +212,7 @@ jobs:
           data = {
               'media_type': 'REELS',
               'video_url': VIDEO_URL,
-              'caption': f'🕌 القرآن الكريم | Quran Recitation\n📖 Abdul Basit Abdul Samad\n✨ {GROUP_ID}\n\n#Quran #Islam #QuranRecitation #القرآن #تلاوة',
+              'caption': caption,
               'access_token': TOKEN
           }
           
@@ -217,6 +262,8 @@ jobs:
           
           if pub_r.status_code == 200:
               print(f"✅ Published: {pub_r.json()['id']}")
+              print(f"📱 Caption preview:")
+              print(caption)
           else:
               print(f"❌ Publish failed: {pub_r.text}")
               exit(1)
