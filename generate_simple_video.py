@@ -696,13 +696,14 @@ def create_simple_video(
     
     video_info = get_random_background_video()
     if not video_info:
-        return False
-    
-    print(f"Selected background: {video_info.get('tags', 'video')[:50]}")
-    
-    bg_video_path = download_background_video(video_info)
-    if not bg_video_path:
-        return False
+        print("⚠️  No background videos available, using solid color background")
+        bg_video_path = None
+    else:
+        print(f"Selected background: {video_info.get('tags', 'video')[:50]}")
+        bg_video_path = download_background_video(video_info)
+        if not bg_video_path:
+            print("⚠️  Background download failed, using solid color background")
+            bg_video_path = None
     
     # Get metadata
     surah_info = get_surah_info(group_data.get('surah', 1))
@@ -764,32 +765,52 @@ def create_simple_video(
     reciter_english_esc = escape_text(reciter_english)
     
     # Collect all inputs for FFmpeg
-    ffmpeg_inputs = [
-        ('-stream_loop', '-1', '-i', str(bg_video_path)),  # [0:v] - background video (looped)
-        ('-i', str(audio_path)),  # [1:a] - audio
-        ('-i', str(top_arabic_img)),  # [2:v] - top Arabic text image
-        ('-i', str(reciter_arabic_img)),  # [3:v] - reciter Arabic text image
-    ]
-    
-    # Create filter complex with proper scaling and image overlays
-    aspect_ratio = 9/16
-    filter_parts = [
-        # Scale video to COVER the entire frame (9:16) so there are NO black bars
-        f"[0:v]scale='if(gt(a,{aspect_ratio}),-2,{VIDEO_WIDTH})':'if(gt(a,{aspect_ratio}),{VIDEO_HEIGHT},-2)'[scaled]",
-        # Center-crop to exact 1080x1920
-        f"[scaled]crop={VIDEO_WIDTH}:{VIDEO_HEIGHT}:(iw-{VIDEO_WIDTH})/2:(ih-{VIDEO_HEIGHT})/2[cropped]",
-        # Enhance brightness and contrast
-        f"[cropped]eq=brightness=0.05:contrast=1.15:saturation=1.1[adjusted]",
-        # Overlay top Arabic text image (centered horizontally, y=220)
-        f"[adjusted][2:v]overlay=(W-w)/2:220[t1]",
-        # Overlay reciter Arabic text image (centered horizontally, y=280)
-        f"[t1][3:v]overlay=(W-w)/2:280[t2]",
-    ]
+    if bg_video_path:
+        # Use background video
+        ffmpeg_inputs = [
+            ('-stream_loop', '-1', '-i', str(bg_video_path)),  # [0:v] - background video (looped)
+            ('-i', str(audio_path)),  # [1:a] - audio
+            ('-i', str(top_arabic_img)),  # [2:v] - top Arabic text image
+            ('-i', str(reciter_arabic_img)),  # [3:v] - reciter Arabic text image
+        ]
+        
+        # Create filter complex with proper scaling and image overlays
+        aspect_ratio = 9/16
+        filter_parts = [
+            # Scale video to COVER the entire frame (9:16) so there are NO black bars
+            f"[0:v]scale='if(gt(a,{aspect_ratio}),-2,{VIDEO_WIDTH})':'if(gt(a,{aspect_ratio}),{VIDEO_HEIGHT},-2)'[scaled]",
+            # Center-crop to exact 1080x1920
+            f"[scaled]crop={VIDEO_WIDTH}:{VIDEO_HEIGHT}:(iw-{VIDEO_WIDTH})/2:(ih-{VIDEO_HEIGHT})/2[cropped]",
+            # Enhance brightness and contrast
+            f"[cropped]eq=brightness=0.05:contrast=1.15:saturation=1.1[adjusted]",
+            # Overlay top Arabic text image (centered horizontally, y=220)
+            f"[adjusted][2:v]overlay=(W-w)/2:220[t1]",
+            # Overlay reciter Arabic text image (centered horizontally, y=280)
+            f"[t1][3:v]overlay=(W-w)/2:280[t2]",
+        ]
+    else:
+        # Create simple solid color background
+        ffmpeg_inputs = [
+            ('-i', str(audio_path)),  # [0:a] - audio
+            ('-i', str(top_arabic_img)),  # [1:v] - top Arabic text image
+            ('-i', str(reciter_arabic_img)),  # [2:v] - reciter Arabic text image
+        ]
+        
+        # Create solid color background and overlay text
+        filter_parts = [
+            # Create solid dark background
+            f"color=c=#0d1b2a:s={VIDEO_WIDTH}x{VIDEO_HEIGHT}:d={audio_duration}[bg]",
+            # Overlay top Arabic text image (centered horizontally, y=220)
+            f"[bg][1:v]overlay=(W-w)/2:220[t1]",
+            # Overlay reciter Arabic text image (centered horizontally, y=280)
+            f"[t1][2:v]overlay=(W-w)/2:280[t2]",
+        ]
     
     # Add center text with timing if provided (Arabic - render as images)
     current_filter = "t2"
     center_text_images = []
-    input_index = 4  # Next available input index after [0]=video, [1]=audio, [2]=top_arabic, [3]=reciter_arabic
+    # Input index depends on whether we have background video or not
+    input_index = 4 if bg_video_path else 3  # Next available input index
     
     if text_data:
         print(f"  Rendering {len(text_data)} center text images...")
