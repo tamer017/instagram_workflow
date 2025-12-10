@@ -74,48 +74,26 @@ jobs:
         run: |
           python generate_simple_video.py --group ${{ steps.next-group.outputs.group_id }}
 
-      - name: Commit and push video
-        id: commit-video
-        run: |
-          git config user.name "GitHub Actions"
-          git config user.email "actions@github.com"
-          git add -f generated_videos/${{ steps.next-group.outputs.group_id }}.mp4
-          git commit -m "Add video: ${{ steps.next-group.outputs.group_id }}"
-          
-          # Push and wait for completion
-          git push origin main
-          
-          # Verify the file is accessible on GitHub
-          VIDEO_URL="https://raw.githubusercontent.com/tamer017/instagram_workflow/main/generated_videos/${{ steps.next-group.outputs.group_id }}.mp4"
-          echo "Waiting for GitHub to update..."
-          
-          for i in {1..30}; do
-            HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$VIDEO_URL")
-            if [ "$HTTP_CODE" = "200" ]; then
-              echo "✅ Video accessible on GitHub (attempt $i)"
-              break
-            fi
-            echo "Waiting... (attempt $i/30, status: $HTTP_CODE)"
-            sleep 5
-          done
-          
-          # Final check
-          FINAL_CODE=$(curl -s -o /dev/null -w "%{http_code}" "$VIDEO_URL")
-          if [ "$FINAL_CODE" != "200" ]; then
-            echo "❌ Video still not accessible after 150s"
-            exit 1
-          fi
+      - name: Upload video as artifact and get URL
+        id: upload-video
+        uses: actions/upload-artifact@v4
+        with:
+          name: video-${{ steps.next-group.outputs.group_id }}
+          path: generated_videos/${{ steps.next-group.outputs.group_id }}.mp4
+          retention-days: 1
 
       - name: Post to Instagram
         env:
           IG_USER_ID: ${{ secrets.IG_USER_ID }}
           LONG_LIVED_TOKEN: ${{ secrets.LONG_LIVED_TOKEN }}
           GROUP_ID: ${{ steps.next-group.outputs.group_id }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           python3 << 'PYTHON_EOF'
           import os
           import requests
           import time
+          import base64
           
           IG_USER_ID = os.environ['IG_USER_ID']
           TOKEN = os.environ['LONG_LIVED_TOKEN']
@@ -128,27 +106,62 @@ jobs:
           
           print(f"📱 Posting {GROUP_ID}")
           
-          # Create container
+          # Read video file as binary
+          with open(VIDEO, 'rb') as f:
+              video_data = f.read()
+          
+          print(f"Video size: {len(video_data) / (1024*1024):.2f} MB")
+          
+          # Create container with video upload
           url = f"https://graph.facebook.com/v21.0/{IG_USER_ID}/media"
+          
+          # Upload video directly
+          files = {
+              'video': (f'{GROUP_ID}.mp4', video_data, 'video/mp4')
+          }
+          
           data = {
               'media_type': 'REELS',
-              'video_url': f'https://raw.githubusercontent.com/tamer017/instagram_workflow/main/{VIDEO}',
               'caption': f'🕌 القرآن الكريم | Quran Recitation\n📖 Abdul Basit Abdul Samad\n✨ {GROUP_ID}\n\n#Quran #Islam #QuranRecitation #القرآن #تلاوة',
               'access_token': TOKEN
           }
           
-          r = requests.post(url, data=data)
+          print("⬆️ Uploading video to Instagram...")
+          r = requests.post(url, data=data, files=files, timeout=300)
+          
           if r.status_code != 200:
-              print(f"❌ {r.text}")
+              print(f"❌ Upload failed: {r.text}")
               exit(1)
           
           container_id = r.json()['id']
-          print(f"Container: {container_id}")
+          print(f"✅ Container created: {container_id}")
           
           # Wait for processing
-          time.sleep(30)
+          print("⏳ Waiting for video processing...")
+          max_wait = 120
+          waited = 0
+          
+          while waited < max_wait:
+              status_url = f"https://graph.facebook.com/v21.0/{container_id}"
+              status_params = {'fields': 'status_code', 'access_token': TOKEN}
+              status_r = requests.get(status_url, params=status_params)
+              
+              if status_r.status_code == 200:
+                  status = status_r.json().get('status_code', 'UNKNOWN')
+                  print(f"Status: {status}")
+                  
+                  if status == 'FINISHED':
+                      print("✅ Processing complete")
+                      break
+                  elif status == 'ERROR':
+                      print("❌ Processing failed")
+                      exit(1)
+              
+              time.sleep(10)
+              waited += 10
           
           # Publish
+          print("📤 Publishing to Instagram...")
           pub_url = f"https://graph.facebook.com/v21.0/{IG_USER_ID}/media_publish"
           pub_data = {'creation_id': container_id, 'access_token': TOKEN}
           pub_r = requests.post(pub_url, data=pub_data)
@@ -156,7 +169,7 @@ jobs:
           if pub_r.status_code == 200:
               print(f"✅ Published: {pub_r.json()['id']}")
           else:
-              print(f"❌ {pub_r.text}")
+              print(f"❌ Publish failed: {pub_r.text}")
               exit(1)
           PYTHON_EOF
 
