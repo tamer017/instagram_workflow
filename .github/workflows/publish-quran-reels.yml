@@ -73,12 +73,27 @@ jobs:
       - name: Generate video
         run: |
           python generate_simple_video.py --group ${{ steps.next-group.outputs.group_id }}
+          
+          # Verify video was created
+          if [ ! -f "generated_videos/${{ steps.next-group.outputs.group_id }}.mp4" ]; then
+            echo "❌ Video generation failed"
+            exit 1
+          fi
+          
+          ls -lh generated_videos/${{ steps.next-group.outputs.group_id }}.mp4
 
       - name: Deploy video to GitHub Pages
         run: |
-          # Save current directory
-          MAIN_DIR=$(pwd)
-          VIDEO_FILE="$MAIN_DIR/generated_videos/${{ steps.next-group.outputs.group_id }}.mp4"
+          # Save video path (must be absolute)
+          VIDEO_FILE="$(pwd)/generated_videos/${{ steps.next-group.outputs.group_id }}.mp4"
+          
+          echo "📁 Video file: $VIDEO_FILE"
+          
+          # Verify file exists
+          if [ ! -f "$VIDEO_FILE" ]; then
+            echo "❌ Video file not found: $VIDEO_FILE"
+            exit 1
+          fi
           
           # Configure git
           git config user.name "GitHub Actions"
@@ -96,8 +111,11 @@ jobs:
           # Create videos directory
           mkdir -p videos
           
-          # Copy video file
-          cp "$VIDEO_FILE" videos/
+          # Copy video file (using absolute path)
+          echo "📋 Copying video..."
+          cp "$VIDEO_FILE" videos/${{ steps.next-group.outputs.group_id }}.mp4
+          
+          ls -lh videos/
           
           # Create simple index.html
           cat > index.html << 'HTML'
