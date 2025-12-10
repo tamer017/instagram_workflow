@@ -94,6 +94,35 @@ jobs:
             exit 1
           fi
           
+          # Check file size
+          VIDEO_SIZE=$(stat -c%s "generated_videos/${{ steps.next-group.outputs.group_id }}.mp4")
+          VIDEO_SIZE_MB=$((VIDEO_SIZE / 1024 / 1024))
+          
+          echo "📊 Generated video size: ${VIDEO_SIZE_MB}MB"
+          
+          # If video is too large, re-encode with higher compression
+          if [ $VIDEO_SIZE_MB -gt 95 ]; then
+            echo "⚠️ Video too large (${VIDEO_SIZE_MB}MB), re-encoding with higher compression..."
+            
+            ffmpeg -i "generated_videos/${{ steps.next-group.outputs.group_id }}.mp4" \
+              -c:v libx264 \
+              -preset medium \
+              -crf 28 \
+              -c:a aac \
+              -b:a 128k \
+              -movflags +faststart \
+              -y "generated_videos/${{ steps.next-group.outputs.group_id }}_compressed.mp4"
+            
+            # Replace original with compressed
+            mv "generated_videos/${{ steps.next-group.outputs.group_id }}_compressed.mp4" \
+               "generated_videos/${{ steps.next-group.outputs.group_id }}.mp4"
+            
+            # Check new size
+            NEW_SIZE=$(stat -c%s "generated_videos/${{ steps.next-group.outputs.group_id }}.mp4")
+            NEW_SIZE_MB=$((NEW_SIZE / 1024 / 1024))
+            echo "✅ Compressed to ${NEW_SIZE_MB}MB"
+          fi
+          
           ls -lh generated_videos/${{ steps.next-group.outputs.group_id }}.mp4
 
       - name: Deploy video to GitHub Pages

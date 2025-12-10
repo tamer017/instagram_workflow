@@ -57,8 +57,8 @@ VIDEO_WIDTH = 1080
 VIDEO_HEIGHT = 1920
 VIDEO_FPS = 30
 
-# Audio settings (higher quality for better output)
-AUDIO_BITRATE = "256k"
+# Audio settings (optimized for file size while maintaining quality)
+AUDIO_BITRATE = "192k"
 
 # Text overlay data (Arabic - displays in center)
 ARABIC_TEXT = []
@@ -972,15 +972,15 @@ def create_simple_video(
         '-filter_complex', filter_complex,
         '-map', '[output]',
         '-map', audio_input_idx,
-        # Video encoding with higher quality
+        # Video encoding optimized for Instagram Reels and GitHub file size limit
         '-c:v', 'libx264',
-        '-preset', 'slow',  # Slower preset = better quality
-        '-crf', '18',  # Lower CRF = higher quality (18 is visually lossless)
+        '-preset', 'medium',  # Balanced speed and compression
+        '-crf', '25',  # Good quality for social media (keeps files under 100MB)
         '-profile:v', 'high',  # High profile for better compression
         '-level', '4.2',  # H.264 level for HD video
         '-pix_fmt', 'yuv420p',  # Pixel format for maximum compatibility
         '-movflags', '+faststart',  # Optimize for streaming
-        # Audio encoding with higher quality
+        # Audio encoding optimized for file size
         '-c:a', 'aac',
         '-b:a', AUDIO_BITRATE,
         '-ar', '48000',  # 48kHz sample rate (professional quality)
