@@ -84,16 +84,12 @@ jobs:
 
       - name: Deploy video to GitHub Pages
         run: |
-          # Save video path (must be absolute)
-          VIDEO_FILE="$(pwd)/generated_videos/${{ steps.next-group.outputs.group_id }}.mp4"
+          # Copy video to temp location (outside git workspace)
+          TEMP_VIDEO="/tmp/${{ steps.next-group.outputs.group_id }}.mp4"
+          cp "generated_videos/${{ steps.next-group.outputs.group_id }}.mp4" "$TEMP_VIDEO"
           
-          echo "📁 Video file: $VIDEO_FILE"
-          
-          # Verify file exists
-          if [ ! -f "$VIDEO_FILE" ]; then
-            echo "❌ Video file not found: $VIDEO_FILE"
-            exit 1
-          fi
+          echo "📁 Copied to: $TEMP_VIDEO"
+          ls -lh "$TEMP_VIDEO"
           
           # Configure git
           git config user.name "GitHub Actions"
@@ -111,9 +107,9 @@ jobs:
           # Create videos directory
           mkdir -p videos
           
-          # Copy video file (using absolute path)
-          echo "📋 Copying video..."
-          cp "$VIDEO_FILE" videos/${{ steps.next-group.outputs.group_id }}.mp4
+          # Copy video from temp
+          echo "📋 Copying video to gh-pages..."
+          cp "$TEMP_VIDEO" "videos/${{ steps.next-group.outputs.group_id }}.mp4"
           
           ls -lh videos/
           
@@ -136,6 +132,9 @@ jobs:
           
           # Return to main branch
           git checkout main
+          
+          # Cleanup temp file
+          rm -f "$TEMP_VIDEO"
 
       - name: Wait for GitHub Pages to deploy
         run: |
