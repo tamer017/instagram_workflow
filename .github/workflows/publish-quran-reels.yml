@@ -76,26 +76,30 @@ jobs:
 
       - name: Deploy video to GitHub Pages
         run: |
-          # Create/update gh-pages branch
+          # Save current directory
+          MAIN_DIR=$(pwd)
+          VIDEO_FILE="$MAIN_DIR/generated_videos/${{ steps.next-group.outputs.group_id }}.mp4"
+          
+          # Configure git
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
           
-          # Create videos directory in gh-pages
-          mkdir -p gh-pages-videos
-          cp generated_videos/${{ steps.next-group.outputs.group_id }}.mp4 gh-pages-videos/
+          # Fetch gh-pages branch
+          git fetch origin gh-pages || echo "gh-pages doesn't exist yet"
           
-          # Switch to gh-pages branch (create if doesn't exist)
-          git fetch origin gh-pages || git checkout --orphan gh-pages
+          # Switch to gh-pages branch
           git checkout gh-pages || git checkout --orphan gh-pages
           
-          # Remove all files except videos
-          git rm -rf . 2>/dev/null || true
+          # Clean directory but keep .git
+          find . -maxdepth 1 ! -name '.git' ! -name '.' ! -name '..' -exec rm -rf {} +
           
-          # Copy video
+          # Create videos directory
           mkdir -p videos
-          cp ../gh-pages-videos/${{ steps.next-group.outputs.group_id }}.mp4 videos/
           
-          # Create index.html
+          # Copy video file
+          cp "$VIDEO_FILE" videos/
+          
+          # Create simple index.html
           cat > index.html << 'HTML'
           <!DOCTYPE html>
           <html>
@@ -104,10 +108,13 @@ jobs:
           </html>
           HTML
           
+          # Create .nojekyll to serve files as-is
+          touch .nojekyll
+          
           # Commit and push
           git add .
           git commit -m "Add video: ${{ steps.next-group.outputs.group_id }}"
-          git push -f origin gh-pages
+          git push origin gh-pages
           
           # Return to main branch
           git checkout main
