@@ -39,6 +39,44 @@ jobs:
           # List available Arabic fonts for debugging
           fc-list :lang=ar | head -10
 
+      - name: Download Quranic fonts
+        run: |
+          mkdir -p fonts
+          
+          echo "📥 Downloading Scheherazade New font..."
+          wget -q https://github.com/silnrsi/font-scheherazade/releases/download/v3.300/ScheherazadeNew-3.300.zip -O /tmp/scheherazade.zip
+          unzip -q /tmp/scheherazade.zip -d /tmp/scheherazade
+          cp /tmp/scheherazade/ScheherazadeNew-3.300/ScheherazadeNew-Regular.ttf fonts/
+          
+          echo "📥 Downloading Amiri Quran font..."
+          wget -q https://github.com/aliftype/amiri/releases/download/0.113/Amiri-0.113.zip -O /tmp/amiri.zip
+          unzip -q /tmp/amiri.zip -d /tmp/amiri
+          cp /tmp/amiri/Amiri-0.113/AmiriQuran-Regular.ttf fonts/
+          
+          echo "✅ Fonts downloaded:"
+          ls -lh fonts/
+          
+          # Verify fonts can be loaded
+          python3 << 'PYTHON_EOF'
+          from PIL import ImageFont
+          from pathlib import Path
+          
+          fonts_to_check = [
+              'fonts/ScheherazadeNew-Regular.ttf',
+              'fonts/AmiriQuran-Regular.ttf'
+          ]
+          
+          for font_path in fonts_to_check:
+              if Path(font_path).exists():
+                  try:
+                      font = ImageFont.truetype(font_path, 60)
+                      print(f"✓ {font_path} loaded successfully")
+                  except Exception as e:
+                      print(f"⚠️ {font_path} failed to load: {e}")
+              else:
+                  print(f"❌ {font_path} not found")
+          PYTHON_EOF
+
       - name: Get next group
         id: next-group
         run: |

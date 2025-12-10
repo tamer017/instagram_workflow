@@ -334,38 +334,48 @@ def render_arabic_text_image(
     """
     try:
         # Shape the Arabic text properly for display
-        # UthmanTN1 and other Quranic fonts handle shaping internally
+        # Use arabic_reshaper and bidi for proper RTL rendering
         reshaped = arabic_reshaper.reshape(text)
         bidi_text = get_display(reshaped)
         
-        # Load font
-        try:
-            font = ImageFont.truetype(font_path, font_size)
-            print(f"✓ Loaded font: {Path(font_path).name}")
-        except Exception as font_error:
-            print(f"⚠️  Error loading font {font_path}: {font_error}")
-            # Fallback: try other Quranic fonts in priority order
-            fallback_fonts = [
-                ("fonts/UthmanicHafs_v20.otf", "KFGQPC Uthmanic Hafs (Tajweed)"),
-                ("fonts/ScheherazadeNew-Regular.ttf", "Scheherazade New"),
-                ("fonts/AmiriQuran-Regular.ttf", "Amiri Quran"),
-                ("fonts/NotoNaskhArabic-Regular.ttf", "Noto Naskh Arabic"),
-                ("fonts/Lateef-Regular.ttf", "Lateef"),
-                ("C:/Windows/Fonts/tahoma.ttf", "Tahoma"),
-                ("C:/Windows/Fonts/arial.ttf", "Arial"),
-                ("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", "DejaVu Sans")
-            ]
-            for fallback_font, fallback_name in fallback_fonts:
-                try:
-                    if Path(fallback_font).exists():
-                        font = ImageFont.truetype(fallback_font, font_size)
-                        print(f"✓ Using fallback font: {fallback_name}")
-                        break
-                except:
-                    continue
-            else:
-                print("⚠️  All fonts failed, using default font (text may not display correctly)")
-                font = ImageFont.load_default()
+        # Load font - try multiple options
+        font = None
+        tried_fonts = []
+        
+        # List of fonts to try in order
+        font_candidates = [
+            font_path,
+            "fonts/ScheherazadeNew-Regular.ttf",
+            "fonts/AmiriQuran-Regular.ttf",
+            "fonts/NotoNaskhArabic-Regular.ttf",
+            "fonts/Lateef-Regular.ttf",
+            "fonts/UthmanicHafs_v20.otf",
+            "C:/Windows/Fonts/tahoma.ttf",
+            "C:/Windows/Fonts/arial.ttf",
+            "/usr/share/fonts/truetype/Scheherazade/Scheherazade-Regular.ttf",
+            "/usr/share/fonts/opentype/Scheherazade/Scheherazade-Regular.ttf",
+            "/usr/share/fonts/truetype/noto/NotoNaskhArabic-Regular.ttf",
+            "/usr/share/fonts/truetype/noto/NotoSansArabic-Regular.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+        ]
+        
+        for font_candidate in font_candidates:
+            if font_candidate in tried_fonts:
+                continue
+            tried_fonts.append(font_candidate)
+            
+            try:
+                if Path(font_candidate).exists():
+                    font = ImageFont.truetype(font_candidate, font_size)
+                    print(f"✓ Loaded font for rendering: {Path(font_candidate).name}")
+                    break
+            except Exception as e:
+                print(f"  ⚠️  Could not load {Path(font_candidate).name}: {e}")
+                continue
+        
+        if font is None:
+            print("⚠️  All font loading attempts failed, using PIL default font")
+            font = ImageFont.load_default()
         
         # Create a temporary image to measure text size
         temp_img = Image.new('RGBA', (1, 1), (0, 0, 0, 0))
@@ -1025,7 +1035,7 @@ def process_group(group_id: str, ffmpeg_path: str, text_data: Optional[List[tupl
         return False
     
     # Populate text overlays from ayah data (if not disabled)
-    def extract_arabic_text(segments, words, verse_num_arabic, lower_limit=6, upper_limit=9):
+    def extract_arabic_text(segments, words, verse_num_arabic, lower_limit=4, upper_limit=7):
         if(len(words) == 0) or len(segments) == 0:
             return
         if len(words) < lower_limit:
@@ -1121,6 +1131,16 @@ Note: The script will automatically download UthmanTN1 font for proper Quranic t
         sys.exit(1)
     
     print(f"FFmpeg found: {ffmpeg_path}\n")
+    
+    # Ensure fonts are available before starting
+    print("Verifying Arabic fonts...")
+    try:
+        font_path = get_font_path()
+        print(f"✓ Font ready: {font_path}\n")
+    except Exception as e:
+        print(f"❌ Font verification failed: {e}")
+        print("Please ensure at least one Arabic font is available.")
+        sys.exit(1)
     
     # Use static text overlays unless disabled
     text_data = None if args.no_arabic_text else ARABIC_TEXT
