@@ -41,7 +41,8 @@ jobs:
           
           # Load reciter 1 groups
           with open('quran_groups/reciter_1_AbdulBaset_AbdulSamad_groups.json', 'r', encoding='utf-8') as f:
-              groups = json.load(f)['groups']
+              data = json.load(f)
+              groups = list(data['groups'].keys())
           
           # Load tracker
           tracker_file = 'approved_videos.json'
@@ -52,14 +53,14 @@ jobs:
           
           # Find next unpublished group
           next_group = None
-          for group in groups:
-              if group['group_id'] not in published:
-                  next_group = group['group_id']
+          for group_id in groups:
+              if group_id not in published:
+                  next_group = group_id
                   break
           
           # If all published, restart
           if not next_group:
-              next_group = groups[0]['group_id']
+              next_group = groups[0]
               published = []  # Reset
           
           with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
