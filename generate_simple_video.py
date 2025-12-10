@@ -1102,7 +1102,7 @@ def process_group(group_id: str, ffmpeg_path: str, text_data: Optional[List[tupl
         return False
     
     # Populate text overlays from ayah data (if not disabled)
-    def extract_arabic_text(segments, words, verse_num_arabic, lower_limit=4, upper_limit=7):
+    def extract_arabic_text(segments, words, verse_num_arabic, lower_limit=5, upper_limit=8):
         if(len(words) == 0) or len(segments) == 0:
             return
         if len(words) < lower_limit:
