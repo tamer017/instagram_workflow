@@ -1,0 +1,168 @@
+name: Publish Quran Reels to Instagram
+
+on:
+  schedule:
+    - cron: '0 * * * *'  # Every hour
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  publish-reel:
+    runs-on: ubuntu-latest
+    name: Generate and Publish Quran Reel
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install FFmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Get next group
+        id: next-group
+        run: |
+          python3 << 'EOF'
+import json
+import os
+
+# Load reciter 1 groups
+with open('quran_groups/reciter_1_AbdulBaset_AbdulSamad_groups.json', 'r', encoding='utf-8') as f:
+    groups = json.load(f)['groups']
+
+# Load tracker
+tracker_file = 'approved_videos.json'
+published = []
+if os.path.exists(tracker_file):
+    with open(tracker_file, 'r', encoding='utf-8') as f:
+        published = json.load(f).get('published_groups', [])
+
+# Find next unpublished group
+next_group = None
+for group in groups:
+    if group['group_id'] not in published:
+        next_group = group['group_id']
+        break
+
+# If all published, restart
+if not next_group:
+    next_group = groups[0]['group_id']
+    published = []  # Reset
+
+with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+    f.write(f"group_id={next_group}\n")
+    f.write(f"restart={'true' if len(published) == 0 else 'false'}\n")
+    
+print(f"Next: {next_group}")
+EOF
+
+      - name: Generate video
+        run: |
+          python generate_simple_video.py --group ${{ steps.next-group.outputs.group_id }}
+
+      - name: Post to Instagram
+        env:
+          IG_USER_ID: ${{ secrets.IG_USER_ID }}
+          LONG_LIVED_TOKEN: ${{ secrets.LONG_LIVED_TOKEN }}
+          GROUP_ID: ${{ steps.next-group.outputs.group_id }}
+        run: |
+          python3 << 'EOF'
+import os
+import requests
+import time
+
+IG_USER_ID = os.environ['IG_USER_ID']
+TOKEN = os.environ['LONG_LIVED_TOKEN']
+GROUP_ID = os.environ['GROUP_ID']
+VIDEO = f"generated_videos/{GROUP_ID}.mp4"
+
+if not os.path.exists(VIDEO):
+    print(f"❌ Video not found: {VIDEO}")
+    exit(1)
+
+print(f"📱 Posting {GROUP_ID}")
+
+# Create container
+url = f"https://graph.facebook.com/v21.0/{IG_USER_ID}/media"
+data = {
+    'media_type': 'REELS',
+    'video_url': f'https://raw.githubusercontent.com/tamer017/instagram_workflow/main/{VIDEO}',
+    'caption': f'🕌 القرآن الكريم | Quran Recitation\n📖 Abdul Basit Abdul Samad\n✨ {GROUP_ID}\n\n#Quran #Islam #QuranRecitation #القرآن #تلاوة',
+    'access_token': TOKEN
+}
+
+r = requests.post(url, data=data)
+if r.status_code != 200:
+    print(f"❌ {r.text}")
+    exit(1)
+
+container_id = r.json()['id']
+print(f"Container: {container_id}")
+
+# Wait for processing
+time.sleep(30)
+
+# Publish
+pub_url = f"https://graph.facebook.com/v21.0/{IG_USER_ID}/media_publish"
+pub_data = {'creation_id': container_id, 'access_token': TOKEN}
+pub_r = requests.post(pub_url, data=pub_data)
+
+if pub_r.status_code == 200:
+    print(f"✅ Published: {pub_r.json()['id']}")
+else:
+    print(f"❌ {pub_r.text}")
+    exit(1)
+EOF
+
+      - name: Update tracker
+        run: |
+          python3 << 'EOF'
+import json
+import os
+
+tracker_file = 'approved_videos.json'
+group_id = os.environ['GROUP_ID']
+restart = os.environ['RESTART'] == 'true'
+
+tracker = {'published_groups': []}
+if os.path.exists(tracker_file) and not restart:
+    with open(tracker_file, 'r') as f:
+        tracker = json.load(f)
+
+if 'published_groups' not in tracker:
+    tracker['published_groups'] = []
+
+if restart:
+    tracker['published_groups'] = [group_id]
+elif group_id not in tracker['published_groups']:
+    tracker['published_groups'].append(group_id)
+
+with open(tracker_file, 'w') as f:
+    json.dump(tracker, f, indent=2)
+
+print(f"✅ Tracked {group_id}")
+EOF
+        env:
+          GROUP_ID: ${{ steps.next-group.outputs.group_id }}
+          RESTART: ${{ steps.next-group.outputs.restart }}
+
+      - name: Commit
+        run: |
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          git add approved_videos.json
+          git commit -m "Published: ${{ steps.next-group.outputs.group_id }}" || true
+          git push origin main || true
