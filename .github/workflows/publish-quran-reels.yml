@@ -46,8 +46,8 @@ jobs:
               data = json.load(f)
               groups = list(data['groups'].keys())
           
-          # Load tracker
-          tracker_file = 'approved_videos.json'
+          # Load tracker from separate file
+          tracker_file = 'published_groups.json'
           published = []
           if os.path.exists(tracker_file):
               with open(tracker_file, 'r', encoding='utf-8') as f:
@@ -298,7 +298,7 @@ jobs:
           import json
           import os
           
-          tracker_file = 'approved_videos.json'
+          tracker_file = 'published_groups.json'
           group_id = os.environ['GROUP_ID']
           restart = os.environ['RESTART'] == 'true'
           
@@ -316,9 +316,10 @@ jobs:
               tracker['published_groups'].append(group_id)
           
           with open(tracker_file, 'w') as f:
-              json.dump(tracker, f, indent=2)
+              json.dump(tracker, f, indent=2, ensure_ascii=False)
           
           print(f"✅ Tracked {group_id}")
+          print(f"📊 Total published: {len(tracker['published_groups'])}")
           PYTHON_EOF
         env:
           GROUP_ID: ${{ steps.next-group.outputs.group_id }}
@@ -328,6 +329,6 @@ jobs:
         run: |
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
-          git add approved_videos.json
+          git add published_groups.json
           git commit -m "Published: ${{ steps.next-group.outputs.group_id }}" || true
           git push origin main || true
