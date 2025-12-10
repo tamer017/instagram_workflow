@@ -298,9 +298,8 @@ def render_arabic_text_image(
     try:
         # Use arabic_reshaper for connected letters (presentation forms)
         # Arial/Tahoma/Liberation Sans support these forms well
-        reshaped = arabic_reshaper.reshape(text)
-        # Use get_display() for proper bidi algorithm and RTL reversal
-        bidi_text = get_display(reshaped)
+        # Don't reverse - let the shaped text render as-is
+        bidi_text = arabic_reshaper.reshape(text)
         
         # Load font - try multiple options
         font = None
