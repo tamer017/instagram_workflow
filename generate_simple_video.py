@@ -243,6 +243,41 @@ def get_font_path() -> str:
     return get_available_font()
 
 
+def remove_tashkeel(text: str) -> str:
+    """
+    Remove Arabic diacritics (tashkeel) from text.
+    
+    Args:
+        text: Arabic text with tashkeel
+    
+    Returns:
+        Text without tashkeel marks
+    """
+    # Arabic diacritics Unicode ranges
+    tashkeel = [
+        '\u064B',  # Fathatan
+        '\u064C',  # Dammatan
+        '\u064D',  # Kasratan
+        '\u064E',  # Fatha
+        '\u064F',  # Damma
+        '\u0650',  # Kasra
+        '\u0651',  # Shadda
+        '\u0652',  # Sukun
+        '\u0653',  # Maddah
+        '\u0654',  # Hamza above
+        '\u0655',  # Hamza below
+        '\u0656',  # Subscript alef
+        '\u0657',  # Inverted damma
+        '\u0658',  # Mark noon ghunna
+        '\u0670',  # Superscript alef
+    ]
+    
+    for mark in tashkeel:
+        text = text.replace(mark, '')
+    
+    return text
+
+
 def shape_arabic_text(text: str) -> str:
     """
     Properly shape Arabic text for display (handles ligatures, diacritics).
@@ -752,11 +787,11 @@ def create_simple_video(
     arabic_digits = '٠١٢٣٤٥٦٧٨٩'
     to_arabic_numerals = lambda num: ''.join(arabic_digits[int(d)] if d.isdigit() else d for d in str(num))
     
-    # Prepare text overlays
-    surah_arabic = surah_info['arabic']
+    # Prepare text overlays (remove tashkeel for cleaner display)
+    surah_arabic = remove_tashkeel(surah_info['arabic'])
     ayah_numbers_ar = to_arabic_numerals(ayah_start) if ayah_start == ayah_end else f"{to_arabic_numerals(ayah_start)}-{to_arabic_numerals(ayah_end)}"
     top_arabic = f"{surah_arabic} {ayah_numbers_ar}"
-    reciter_arabic = reciter_names['arabic']
+    reciter_arabic = remove_tashkeel(reciter_names['arabic'])
     
     surah_english = surah_info['english']
     english_info = f"{surah_english} | Verse {ayah_start}" if ayah_start == ayah_end else f"{surah_english} | Verses {ayah_start}-{ayah_end}"
@@ -1069,15 +1104,19 @@ def process_group(group_id: str, ffmpeg_path: str, text_data: Optional[List[tupl
             return
         if len(words) < lower_limit:
             duration = ((segments[-1][-1] - segments[0][2]) / 1000.0)
-            ARABIC_TEXT.append((" ".join(words) + f" ﴿{verse_num_arabic}﴾", duration))
+            text_without_tashkeel = remove_tashkeel(" ".join(words) + f" ){verse_num_arabic}(")
+            ARABIC_TEXT.append((text_without_tashkeel, duration))
         elif len(words) >= lower_limit and len(words) < upper_limit:
             duration1 = ((segments[len(words)//2][-1] - segments[0][2]) / 1000.0)
-            duration2 = ((segments[-1][-1] - segments[len(words)//2 + 1][2]) / 1000.0) 
-            ARABIC_TEXT.append((" ".join(words[:len(words)//2]), duration1))
-            ARABIC_TEXT.append((" ".join(words[len(words)//2:]) + f" ﴿{verse_num_arabic}﴾", duration2))
+            duration2 = ((segments[-1][-1] - segments[len(words)//2 + 1][2]) / 1000.0)
+            text1_without_tashkeel = remove_tashkeel(" ".join(words[:len(words)//2]))
+            text2_without_tashkeel = remove_tashkeel(" ".join(words[len(words)//2:]) + f" ){verse_num_arabic}(")
+            ARABIC_TEXT.append((text1_without_tashkeel, duration1))
+            ARABIC_TEXT.append((text2_without_tashkeel, duration2))
         else:
             duration = ((segments[lower_limit-1][-1] - segments[0][2]) / 1000.0)
-            ARABIC_TEXT.append((" ".join(words[:lower_limit]), duration))
+            text_without_tashkeel = remove_tashkeel(" ".join(words[:lower_limit]))
+            ARABIC_TEXT.append((text_without_tashkeel, duration))
             extract_arabic_text(segments[lower_limit:], words=words[lower_limit:],verse_num_arabic=verse_num_arabic)
     
     def extract_english_text(words, duration, lower_limit=10):
