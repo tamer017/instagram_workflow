@@ -204,37 +204,40 @@ def download_quranic_font() -> Optional[str]:
 
 
 def get_available_font():
-    """Return Arial font path (forced for best connected Arabic letter rendering)."""
+    """Return best Arabic font with tashkeel support."""
     
-    print("🔍 Looking for Arial font...")
+    print("🔍 Looking for Arabic fonts with tashkeel support...")
     
-    # Force Arial font only - best for connected letters with arabic_reshaper
     import platform
     system = platform.system()
     
+    # Priority: Scheherazade > Amiri > Noto Naskh
     if system == "Windows":
-        arial_paths = [
-            "C:/Windows/Fonts/arial.ttf",
-            "C:/Windows/Fonts/Arial.ttf",
+        font_paths = [
+            "fonts/ScheherazadeNew-Regular.ttf",
+            "fonts/Amiri-Regular.ttf",
+            "fonts/NotoNaskhArabic-Regular.ttf",
         ]
     elif system == "Linux":
-        arial_paths = [
-            "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",  # Arial equivalent
-            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",  # Fallback
+        font_paths = [
+            "fonts/ScheherazadeNew-Regular.ttf",
+            "fonts/Amiri-Regular.ttf",
+            "fonts/NotoNaskhArabic-Regular.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
         ]
     else:  # macOS
-        arial_paths = [
-            "/Library/Fonts/Arial.ttf",
-            "/System/Library/Fonts/Supplemental/Arial.ttf",
+        font_paths = [
+            "fonts/ScheherazadeNew-Regular.ttf",
+            "fonts/Amiri-Regular.ttf",
+            "fonts/NotoNaskhArabic-Regular.ttf",
         ]
     
-    for font in arial_paths:
+    for font in font_paths:
         if Path(font).exists():
-            print(f"✓ Using font: {font} (Arial - optimized for connected Arabic)")
+            print(f"✓ Using font: {font}")
             return font
     
-    # Last resort
-    print("⚠️  Arial not found! Using default font.")
+    print("⚠️  No Arabic fonts found!")
     return "arial.ttf"
 
 
