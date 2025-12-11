@@ -211,25 +211,25 @@ def get_available_font():
     import platform
     system = platform.system()
     
-    # Priority: Scheherazade > Amiri > Noto Naskh
+    # Priority: Amiri > Noto Naskh > Scheherazade
     if system == "Windows":
         font_paths = [
-            "fonts/ScheherazadeNew-Regular.ttf",
             "fonts/Amiri-Regular.ttf",
             "fonts/NotoNaskhArabic-Regular.ttf",
+            "fonts/ScheherazadeNew-Regular.ttf",
         ]
     elif system == "Linux":
         font_paths = [
-            "fonts/ScheherazadeNew-Regular.ttf",
             "fonts/Amiri-Regular.ttf",
             "fonts/NotoNaskhArabic-Regular.ttf",
+            "fonts/ScheherazadeNew-Regular.ttf",
             "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
         ]
     else:  # macOS
         font_paths = [
-            "fonts/ScheherazadeNew-Regular.ttf",
             "fonts/Amiri-Regular.ttf",
             "fonts/NotoNaskhArabic-Regular.ttf",
+            "fonts/ScheherazadeNew-Regular.ttf",
         ]
     
     for font in font_paths:
