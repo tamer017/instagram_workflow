@@ -134,11 +134,19 @@ jobs:
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
           
+          # Reset any changes to avoid conflicts
+          git reset --hard
+          git clean -fd
+          
           # Fetch gh-pages branch
           git fetch origin gh-pages || echo "gh-pages doesn't exist yet"
           
-          # Switch to gh-pages branch
-          git checkout gh-pages || git checkout --orphan gh-pages
+          # Switch to gh-pages branch (force clean checkout)
+          if git show-ref --verify --quiet refs/remotes/origin/gh-pages; then
+            git checkout -B gh-pages origin/gh-pages
+          else
+            git checkout --orphan gh-pages
+          fi
           
           # Clean directory but keep .git
           find . -maxdepth 1 ! -name '.git' ! -name '.' ! -name '..' -exec rm -rf {} +
@@ -167,7 +175,9 @@ jobs:
           # Commit and push
           git add .
           git commit -m "Add video: ${{ steps.next-group.outputs.group_id }}"
-          git push origin gh-pages
+          
+          # Force push to handle any conflicts (gh-pages is just for hosting)
+          git push -f origin gh-pages
           
           # Return to main branch
           git checkout main
