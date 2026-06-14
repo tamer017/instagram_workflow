@@ -1,117 +1,185 @@
-# Instagram Content Workflow — AI-Powered CI/CD Pipeline
+# 🎦 Quranic Video Generator for Instagram
 
-> **Serverless CI/CD pipeline combining FFmpeg video processing, Instagram Graph API publishing, and GPT-4 content generation — fully automated via GitHub Actions.**
+Automated system to generate beautiful Quran recitation videos with Arabic text overlays and publish to Instagram using GitHub Actions.
 
 [![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://www.python.org/)
-[![LangChain](https://img.shields.io/badge/LangChain-latest-green.svg)](https://langchain.com/)
 [![GitHub Actions](https://img.shields.io/badge/CI%2FCD-GitHub_Actions-black.svg)](https://github.com/features/actions)
 [![FFmpeg](https://img.shields.io/badge/Video-FFmpeg-red.svg)](https://ffmpeg.org/)
+[![Status](https://img.shields.io/badge/Status-Active%20%26%20Maintained-brightgreen.svg)]()
 
 ---
 
-## Overview
+## ✨ Features
 
-This project automates the entire Instagram Reels publishing workflow — from raw video to published post with AI-generated captions — without any manual intervention. The pipeline runs entirely on GitHub Actions (serverless), triggered on schedule or by push.
-
----
-
-## Pipeline Architecture
-
-```
-Trigger (Schedule / Push)
-          │
-    GitHub Actions
-          │
-┌─────────┼─────────┐
-│         │         │
-Video   LLM       Secrets
-Process Content    Vault
-(FFmpeg) Gen (GPT) (GitHub)
-│         │         │
-└─────────┼─────────┘
-          │
-Instagram Graph API
-(Reels Publish)
-```
+- 🎥 **Background Videos**: Nature scenes (water, fire, flowers, sky, etc.)
+- 📱 **Instagram Reels Optimized**: 1080×1920 (9:16 portrait format)
+- 🏽️ **Audio Sync**: Word-level Quranic text synchronized with reciter audio
+- 📖 **Othmani Script**: Full Arabic text with tashkeel (diacritics)
+- 🌍 **Multiple Reciters**: 12+ Quranic reciters available
+- 🎨 **Bilingual**: Arabic and English translations
+- ⚡ **Automated**: GitHub Actions workflows for generation and publishing
+- 📤 **Auto-Publishing**: Posts to Instagram every 5 minutes
+- 🔐 **Secure**: Private repository with GitHub Secrets
 
 ---
 
-## Features
+## 🚀 Quick Start
 
-### Video Processing (FFmpeg)
-- **H.264 encoding** optimized for Instagram Reels
-- **9:16 aspect ratio** enforcement with intelligent cropping
-- **EBU R128 audio normalization** — consistent loudness across all posts
-- **Watermark overlay** — logo/text overlay compositing
-- Automated thumbnail extraction at specified timestamp
-
-### LLM Content Generation (LangChain + GPT-4)
-- **Tone-controlled caption generation** — configurable voice (professional, casual, inspirational)
-- **Hashtag strategy** — mixes high-reach + niche tags for optimal discoverability
-- **Image prompt generation** for thumbnail creation
-- Multi-language support via system prompt configuration
-
-### CI/CD Infrastructure (GitHub Actions)
-- Runs on schedule (cron) or manual trigger
-- All credentials managed via **encrypted GitHub Secrets** (never hardcoded)
-- Automatic retry on transient API failures
-- Posting log artifact saved per run
-
----
-
-## Configuration
-
-```yaml
-# config.yaml
-video:
-  resolution: "1080x1920"   # 9:16 vertical
-  codec: "libx264"
-  audio_normalize: true
-  watermark: "assets/logo.png"
-
-content:
-  tone: "professional"      # professional | casual | inspirational
-  hashtag_count: 30
-  language: "en"
-
-scheduling:
-  post_time: "18:00"        # Local timezone
-  days: ["mon", "wed", "fri"]
-```
-
----
-
-## GitHub Secrets Required
-
-| Secret | Description |
-|---|---|
-| `INSTAGRAM_ACCESS_TOKEN` | Long-lived Instagram Graph API token |
-| `INSTAGRAM_BUSINESS_ID` | Instagram Business Account ID |
-| `OPENAI_API_KEY` | OpenAI API key for GPT-4 |
-| `VIDEO_SOURCE_URL` | URL or path of source video |
-
----
-
-## Installation
+### 1. Install Dependencies
 
 ```bash
-git clone https://github.com/tamer017/instagram_workflow.git
-cd instagram_workflow
 pip install -r requirements.txt
+```
 
-# Install FFmpeg
-brew install ffmpeg  # macOS
-apt install ffmpeg   # Ubuntu
+### 2. Generate Videos Locally
+
+```bash
+# Generate video for a specific group
+python generate_simple_video.py --group reciter1_s001_001-007
+```
+
+Output saved to: `generated_videos/`
+
+### 3. Setup GitHub Actions (Automated)
+
+#### Add Repository Secrets:
+1. Go to: **Settings → Secrets and variables → Actions**
+2. Add these secrets:
+   - `IG_USER_ID` — Instagram Business Account ID
+   - `LONG_LIVED_TOKEN` — Facebook Page access token
+   - `APP_ID` — Facebook App ID
+   - `APP_SECRET` — Facebook App Secret (optional, for auto-refresh)
+   - `REEL_CAPTION` — (optional) Default caption
+
+---
+
+## 🤖 GitHub Actions Workflows
+
+### 1. Publish Quranic Reels (Every 5 Minutes)
+- **File**: `.github/workflows/publish-reel-automated.yml`
+- **Action**: Generates and publishes Quranic reels to Instagram
+- **Requirements**: Instagram API credentials
+
+### 2. Push Generated Videos to Repository
+- **File**: `.github/workflows/push-generated-videos.yml`
+- **Action**: Generates videos and commits to repository
+- **Schedule**: Every 30 minutes
+
+### Run Manually:
+1. Go to: **Actions** tab
+2. Select workflow
+3. Click **"Run workflow"** button
+4. Check progress in real-time
+
+---
+
+## 🎯 Supported Reciters
+
+- AbdulBaset AbdulSamad
+- Abdur-Rahman as-Sudais
+- Abu Bakr al-Shatri
+- Hani ar-Rifai
+- Mahmoud Khalil Al-Husary
+- Mishari Rashid al-Afasy
+- Mohamed Siddiq al-Minshawi
+- Sa`ud ash-Shuraym
+- Mohamed al-Tablawi
+- And 3 more...
+
+---
+
+## 📁 Project Structure
+
+```
+instagram_workflow/
+├── .github/workflows/           # GitHub Actions
+├── quran_groups/                # Quranic verse groups
+├── generated_videos/            # Output videos
+├── fonts/                       # Arabic fonts
+├── generate_simple_video.py     # Main generator
+├── publish_reel.py              # Publishing script
+└── requirements.txt
 ```
 
 ---
 
-## Skills & Concepts
+## 🔤 Arabic Text Support
 
-`AI Agents` `LangChain` `OpenAI GPT-4` `GitHub Actions` `CI/CD` `FFmpeg` `Instagram Graph API` `Content Automation` `Serverless Pipelines` `Video Processing` `Social Media Automation`
+- **Othmani Script**: Traditional Quranic writing
+- **Full Tashkeel**: Complete diacritical marks
+- **RTL Support**: Proper right-to-left rendering
+- **Auto-Downloaded Fonts**: Best available Quranic fonts
 
 ---
 
-## Author
+## 🛠️ Usage Examples
 
-**Ahmed Tamer Assy** — [GitHub](https://github.com/tamer017) | Machine Learning Researcher @ Volkswagen AG
+```bash
+# Generate with all text
+python generate_simple_video.py --group reciter1_s001_001-007
+
+# Generate without Arabic text
+python generate_simple_video.py --group reciter1_s001_001-007 --no-arabic-text
+
+# Generate without English text
+python generate_simple_video.py --group reciter1_s001_001-007 --no-english-text
+```
+
+---
+
+## 📊 Repository Privacy
+
+✅ **Keep repository PRIVATE** for security
+- All workflows work normally
+- Instagram credentials stored safely in GitHub Secrets
+- Branches automatically private at repository level
+
+---
+
+## 🔐 Security
+
+- ✅ Never commit credentials to git
+- ✅ Use GitHub Secrets for all sensitive data
+- ✅ Keep repository PRIVATE
+- ✅ Rotate tokens every 60 days
+
+---
+
+## 🔍 Troubleshooting
+
+### FFmpeg not found
+```bash
+sudo apt-get install ffmpeg  # Linux
+brew install ffmpeg          # macOS
+choco install ffmpeg         # Windows
+```
+
+### Arabic text not rendering
+- Verify fonts are in `fonts/` directory
+- Fonts auto-download if missing
+
+### Instagram publishing fails
+- Verify `IG_USER_ID` is correct
+- Check token hasn't expired
+- Ensure credentials are in GitHub Secrets
+
+---
+
+## 📄 License
+
+See LICENSE file
+
+---
+
+## 🤝 Contributing
+
+Contributions welcome! Please:
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Push and create a Pull Request
+
+---
+
+**Last Updated**: November 22, 2025  
+**Status**: ✅ Active & Maintained
