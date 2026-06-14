@@ -1,135 +1,117 @@
-# Instagram Automated Video Publishing Workflow
+# Instagram Content Workflow — AI-Powered CI/CD Pipeline
 
-> A fully automated, CI/CD-driven pipeline that downloads, processes, and publishes video content to Instagram Reels using **FFmpeg**, **Instagrapi**, and **GitHub Actions**.
+> **Serverless CI/CD pipeline combining FFmpeg video processing, Instagram Graph API publishing, and GPT-4 content generation — fully automated via GitHub Actions.**
 
-[![CI/CD](https://img.shields.io/badge/CI%2FCD-GitHub%20Actions-2088FF?style=flat-square&logo=github-actions)](https://github.com/features/actions)
-[![Language](https://img.shields.io/badge/Language-Python%203.x-green?style=flat-square)](https://www.python.org/)
-[![Video](https://img.shields.io/badge/Processing-FFmpeg-red?style=flat-square)](https://ffmpeg.org/)
+[![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://www.python.org/)
+[![LangChain](https://img.shields.io/badge/LangChain-latest-green.svg)](https://langchain.com/)
+[![GitHub Actions](https://img.shields.io/badge/CI%2FCD-GitHub_Actions-black.svg)](https://github.com/features/actions)
+[![FFmpeg](https://img.shields.io/badge/Video-FFmpeg-red.svg)](https://ffmpeg.org/)
 
 ---
 
 ## Overview
 
-This project implements a **serverless video content pipeline** that automates the entire lifecycle of Instagram Reels publishing — from raw video download to fully formatted, scheduled publication. Designed around a cloud-native GitHub Actions CI/CD workflow, the pipeline eliminates manual intervention by chaining Python-based automation utilities with powerful CLI video processing tools.
-
-All secrets (credentials, API tokens) are managed securely via GitHub Secrets, making the pipeline safe for use in public repositories without credential exposure.
+This project automates the entire Instagram Reels publishing workflow — from raw video to published post with AI-generated captions — without any manual intervention. The pipeline runs entirely on GitHub Actions (serverless), triggered on schedule or by push.
 
 ---
 
 ## Pipeline Architecture
 
 ```
-[Trigger: GitHub Actions Schedule / Manual Dispatch]
-              |
-              v
-   [Step 1: Download Video]
-   yt-dlp or requests-based downloader
-              |
-              v
-   [Step 2: Video Processing — FFmpeg]
-   • Transcode to H.264 / AAC
-   • Scale to 9:16 vertical (1080×1920)
-   • Trim, add watermark/overlay
-   • Inject metadata
-              |
-              v
-   [Step 3: Publish to Instagram — Instagrapi]
-   • Authenticate with Instagram session
-   • Upload as Reel with caption & hashtags
-   • Optional: Add location, collaborators
-              |
-              v
-   [Step 4: Notify / Log]
-   • Commit upload log back to repository
-   • Slack/Telegram notification (optional)
+Trigger (Schedule / Push)
+          │
+    GitHub Actions
+          │
+┌─────────┼─────────┐
+│         │         │
+Video   LLM       Secrets
+Process Content    Vault
+(FFmpeg) Gen (GPT) (GitHub)
+│         │         │
+└─────────┼─────────┘
+          │
+Instagram Graph API
+(Reels Publish)
 ```
 
 ---
 
-## Technical Highlights
+## Features
 
-### FFmpeg Video Processing
-- Transcodes arbitrary input videos to **Instagram-compatible H.264/AAC MP4**
-- Applies vertical crop/scale to enforce **9:16 aspect ratio** (1080×1920 for Reels)
-- Supports overlay injection for watermarks, text burned via `drawtext` filter
-- Normalizes audio levels with `loudnorm` filter for consistent volume
+### Video Processing (FFmpeg)
+- **H.264 encoding** optimized for Instagram Reels
+- **9:16 aspect ratio** enforcement with intelligent cropping
+- **EBU R128 audio normalization** — consistent loudness across all posts
+- **Watermark overlay** — logo/text overlay compositing
+- Automated thumbnail extraction at specified timestamp
 
-### Instagrapi — Instagram API Client
-- Uses the unofficial but robust **Instagrapi** library for programmatic Instagram interaction
-- Handles **session management** and two-factor authentication (2FA) challenge resolution
-- Publishes Reels with full caption, hashtag set, and cover thumbnail selection
+### LLM Content Generation (LangChain + GPT-4)
+- **Tone-controlled caption generation** — configurable voice (professional, casual, inspirational)
+- **Hashtag strategy** — mixes high-reach + niche tags for optimal discoverability
+- **Image prompt generation** for thumbnail creation
+- Multi-language support via system prompt configuration
 
-### GitHub Actions — Serverless Scheduler
-- Triggered via `cron` schedule or `workflow_dispatch` (manual trigger)
-- Manages Python dependencies with `pip cache` for faster runs
-- Stores Instagram credentials, session cookies, and API tokens as **encrypted GitHub Secrets**
-- Outputs structured logs with upload status for debugging
+### CI/CD Infrastructure (GitHub Actions)
+- Runs on schedule (cron) or manual trigger
+- All credentials managed via **encrypted GitHub Secrets** (never hardcoded)
+- Automatic retry on transient API failures
+- Posting log artifact saved per run
 
-### Secure Secrets Management
+---
+
+## Configuration
+
 ```yaml
-# .github/workflows/publish.yml (excerpt)
-env:
-  IG_USERNAME: ${{ secrets.IG_USERNAME }}
-  IG_PASSWORD: ${{ secrets.IG_PASSWORD }}
-  SESSION_FILE: ${{ secrets.IG_SESSION }}
+# config.yaml
+video:
+  resolution: "1080x1920"   # 9:16 vertical
+  codec: "libx264"
+  audio_normalize: true
+  watermark: "assets/logo.png"
+
+content:
+  tone: "professional"      # professional | casual | inspirational
+  hashtag_count: 30
+  language: "en"
+
+scheduling:
+  post_time: "18:00"        # Local timezone
+  days: ["mon", "wed", "fri"]
 ```
 
 ---
 
-## Project Structure
+## GitHub Secrets Required
 
-```
-instagram_workflow/
-├── .github/
-│   └── workflows/
-│       └── publish.yml      # GitHub Actions workflow definition
-├── scripts/
-│   ├── download.py          # Video acquisition
-│   ├── process.py           # FFmpeg processing pipeline
-│   └── publish.py           # Instagrapi upload logic
-├── config/
-│   └── settings.py          # Caption templates, hashtag sets
-└── requirements.txt
-```
+| Secret | Description |
+|---|---|
+| `INSTAGRAM_ACCESS_TOKEN` | Long-lived Instagram Graph API token |
+| `INSTAGRAM_BUSINESS_ID` | Instagram Business Account ID |
+| `OPENAI_API_KEY` | OpenAI API key for GPT-4 |
+| `VIDEO_SOURCE_URL` | URL or path of source video |
 
 ---
 
-## Getting Started
+## Installation
 
 ```bash
-# Clone the repository
 git clone https://github.com/tamer017/instagram_workflow.git
 cd instagram_workflow
-
-# Install Python dependencies
 pip install -r requirements.txt
 
-# Install FFmpeg (required)
-brew install ffmpeg          # macOS
-sudo apt install ffmpeg      # Ubuntu/Debian
-
-# Set environment variables
-export IG_USERNAME="your_username"
-export IG_PASSWORD="your_password"
-
-# Run the pipeline
-python scripts/download.py
-python scripts/process.py
-python scripts/publish.py
+# Install FFmpeg
+brew install ffmpeg  # macOS
+apt install ffmpeg   # Ubuntu
 ```
 
 ---
 
-## Skills Demonstrated
+## Skills & Concepts
 
-- **Automation Engineering:** End-to-end pipeline design, event-driven CI/CD triggers
-- **Video Processing:** FFmpeg CLI, codec transcoding, filter graphs, aspect ratio management
-- **API Integration:** Instagrapi (Instagram private API), session management, media upload
-- **DevOps:** GitHub Actions YAML workflows, encrypted secrets, artifact caching
-- **Python:** Subprocess management, async I/O, error handling for unstable network operations
+`AI Agents` `LangChain` `OpenAI GPT-4` `GitHub Actions` `CI/CD` `FFmpeg` `Instagram Graph API` `Content Automation` `Serverless Pipelines` `Video Processing` `Social Media Automation`
 
 ---
 
-## ⚠️ Disclaimer
+## Author
 
-> This project uses an **unofficial Instagram API client**. Use responsibly and in compliance with [Instagram’s Terms of Service](https://help.instagram.com/581066165581870). Excessive automated activity may result in account restrictions.
+**Ahmed Tamer Assy** — [GitHub](https://github.com/tamer017) | Machine Learning Researcher @ Volkswagen AG
